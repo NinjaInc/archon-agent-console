@@ -1,0 +1,13 @@
+# /etc/logrotate.d/archon-agent-console - author: Josh Neufield (Archon Tech)
+/var/log/archon-agent-console/*.log {
+    weekly
+    rotate 8
+    maxsize 50M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # The service holds the file open (systemd append:), so truncate in place.
+    copytruncate
+    create 0640 archon archon
+}
