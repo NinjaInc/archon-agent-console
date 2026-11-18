@@ -19,6 +19,91 @@
 
 ---
 
+## Archon Agent Console (fork)
+
+> Private, passkey-secured dashboard for driving **Claude Code** and **Google Antigravity (`agy`)** against your project folders. A fork of CloudCLI UI by Josh Neufield (Archon Tech). Everything below is specific to this fork; the rest of this README is upstream's.
+
+**What differs from upstream**
+
+| Area | Archon behaviour |
+| --- | --- |
+| Login | Passkeys (WebAuthn) only. No passwords, no email/SMS recovery. |
+| Session | `__Host-` cookie, `HttpOnly; Secure; SameSite=Strict`; server-side, revocable; 30 min idle / 12 h absolute. Open websockets/terminals are closed when a session ends. |
+| Network | Binds `127.0.0.1` only (refuses anything else). Reached through a Cloudflare tunnel; the app also verifies the Cloudflare Access JWT itself. |
+| Agents | Claude Code chat + terminal, and an **Antigravity** tab running `agy` in the project folder (PTY). Gemini CLI is gone (upstream removed it). |
+| Files | Explorer, terminals and new projects are confined to `PROJECTS_ROOTS`, symlinks resolved. |
+
+### Install
+
+```bash
+git clone https://github.com/NinjaInc/archon-agent-console && cd archon-agent-console
+npm ci && npm run build          # needs Node >= 22 (tested on 26)
+cp .env.example .env             # then edit APP_ORIGIN, RP_ID, PROJECTS_ROOTS ...
+npm run server                   # http://127.0.0.1:3001
+```
+
+On first start (no passkey yet) the console prints a **one-time setup token** (valid 15 minutes). Open `APP_ORIGIN`, paste the token and tap your authenticator. Further passkeys are added from **Settings > Security** while signed in.
+
+> npm 12 skips install scripts by default. `package.json` allow-lists only the native modules the server needs (`bcrypt`, `better-sqlite3`, `node-pty`, `esbuild`, `sharp`).
+
+For a hardened always-on install (dedicated `archon` user, systemd, logrotate): review and run `sudo deploy/install.sh`.
+
+### Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `HOST` / `SERVER_PORT` | Must be loopback (default `127.0.0.1`) / `3001`. |
+| `APP_ORIGIN`, `RP_ID`, `RP_NAME` | WebAuthn origin (https, real hostname) and relying-party id. Test through the tunnel hostname, not localhost. |
+| `SESSION_IDLE_MINUTES`, `SESSION_MAX_HOURS` | Idle (30) and absolute (12 h) session limits. |
+| `BOOTSTRAP_TOKEN` | Optional fixed first-run token (24+ chars). Otherwise a random one is printed. |
+| `CF_ACCESS_REQUIRED`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | Enforce Cloudflare Access JWT verification (signature, `iss`, `aud`, `exp`). Startup fails if required but unconfigured. |
+| `PROJECTS_ROOTS` | Comma-separated folders the explorer/terminals may use. Default: `~/projects,~/src,~/drive` that exist. |
+| `DATABASE_PATH` | SQLite file holding passkeys, sessions and app data. |
+
+### Cloudflare setup
+
+1. **Tunnel** (install `cloudflared` yourself; this repo never installs system packages):
+   `cloudflared tunnel login && cloudflared tunnel create archon-console && cloudflared tunnel route dns archon-console <HOSTNAME>`
+2. Copy `deploy/cloudflared/archon.yml.example` to `/etc/cloudflared/archon.yml`, fill in the tunnel UUID and `<HOSTNAME>`; credentials file mode `0600`.
+3. Install `deploy/systemd/cloudflared-archon.service` and `systemctl enable --now cloudflared-archon`. Websockets (`/ws`, `/shell`) work through the tunnel unchanged.
+4. **Access application + policy**: dashboard: *Zero Trust > Access > Applications > Add > Self-hosted*, domain `<HOSTNAME>`, policy *Allow* with your single email, session 8 h. Or run `deploy/cloudflare/access.sh.example` / `access.tf.example` after reading them (API token scope: *Access: Apps and Policies Edit*).
+5. Put the app's **AUD tag** and team domain in the env file and set `CF_ACCESS_REQUIRED=true`.
+
+Two independent doors: Cloudflare Access (who may reach the origin) and the passkey (who may use the console). Both must pass.
+
+### Recovery
+
+Lost every passkey? On the server (no remote or email path exists by design):
+
+```bash
+npm run passkey:reset    # wipes all passkeys + sessions, prints a new 15-minute setup token
+```
+
+### Antigravity (`agy`)
+
+Open the **Antigravity** tab. Auth is either `agy`'s own OAuth URL flow (the URL appears in the terminal) or a Gemini API key: `PUT /api/agy/api-key {"apiKey":"..."}` stores it in an owner-only file, sets `{"modelProvider":"gemini"}` in `~/.gemini/antigravity-cli/settings.json`, and injects it only into agy terminals. `agy -p` prints nothing without a TTY, so from scripts or Claude use `scripts/agy-pty.mjs "<prompt>"`, which runs agy in a pseudo-terminal and prints clean text.
+
+### Keeping agents apart
+
+`scripts/agent-worktree.sh create <repo> <agent>` gives each agent its own git worktree and branch so Claude and agy never edit the same tree.
+
+### Rebasing on upstream
+
+```bash
+git remote -v                       # origin = your fork, upstream = siteboon/claudecodeui
+git fetch upstream && git rebase upstream/main
+npm ci && npm run build && npm test && npm run test:client
+```
+Expect conflicts in `server/modules/auth/*`, `server/index.ts`, `src/modules/auth/*`, `src/shared/api.ts` and `src/index.css` (theme tokens). `package-lock.json` should be regenerated if upstream's contains non-npmjs `resolved` URLs.
+
+### Security notes and limits
+
+- Agents run as the service user and can do anything that user can. Isolation is the OS account, `PROJECTS_ROOTS`, and (with `deploy/install.sh`) systemd sandboxing, not a container.
+- A symlink swapped between the path check and the write (TOCTOU) is not defended against; only a local attacker could win it.
+- The first-run token is printed to the server log (owner-only, rotated). It is single-use and expires in 15 minutes.
+
+---
+
 ## Screenshots
 
 <div align="center">
