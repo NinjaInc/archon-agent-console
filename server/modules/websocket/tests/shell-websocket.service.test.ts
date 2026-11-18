@@ -747,7 +747,7 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
   });
 });
 
-test('agy launches in its own pty and never reattaches to the Claude shell of the same project', () => {
+test('agy launches in its own pty and never reattaches to the Claude shell of the same project', async () => {
   const spawnedCommands: string[] = [];
   const dependencies = {
     resolveProviderSessionId: () => null,
@@ -769,7 +769,32 @@ test('agy launches in its own pty and never reattaches to the Claude shell of th
 
   open('claude');
   open('agy');
+  // agy resolves its agent environment asynchronously before spawning.
+  await new Promise((resolve) => setImmediate(resolve));
 
   // Two spawns: agy did not reattach to the existing Claude pty.
   assert.deepEqual(spawnedCommands, ['claude', 'agy']);
+});
+
+test('only the agy pty receives the agent environment (API key never reaches other shells)', async () => {
+  const envs: Array<Record<string, string | undefined> | undefined> = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    getAgentEnvironment: async () => ({ GEMINI_API_KEY: 'test-secret-value-123456' }),
+    spawnPty: (_shell: string, _args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
+      envs.push(options?.env);
+      return createFakePty() as never;
+    },
+  };
+  const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-env-'));
+
+  for (const provider of ['claude', 'agy']) {
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, dependencies);
+    socket.emit('message', JSON.stringify({ type: 'init', projectPath, hasSession: false, provider }));
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(envs[0]?.GEMINI_API_KEY, process.env.GEMINI_API_KEY);
+  assert.equal(envs[1]?.GEMINI_API_KEY, 'test-secret-value-123456');
 });

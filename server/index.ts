@@ -50,6 +50,7 @@ import {
 } from './modules/scheduled-messages/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
+import { agyRoutes, getAgyLaunchEnvironment } from './modules/agy/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
@@ -113,6 +114,8 @@ createWebSocketServer(server, {
         runtime: providerRuntimeService,
     },
     shell: {
+        getAgentEnvironment: async (provider) =>
+            provider === 'agy' ? getAgyLaunchEnvironment() : {},
         resolveProviderSessionId: (sessionId, provider) => {
             const dbSession = sessionsDb.getSessionById(sessionId);
             if (dbSession) {
@@ -163,6 +166,9 @@ app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
 // Chat attachment upload/serving (global ~/.cloudcli/assets store, protected)
 app.use('/api/assets', authenticateToken, assetsRoutes);
+
+// Antigravity (agy) auth configuration (protected; never returns the key)
+app.use('/api/agy', authenticateToken, agyRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);

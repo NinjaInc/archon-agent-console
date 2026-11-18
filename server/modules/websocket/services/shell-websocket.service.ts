@@ -120,6 +120,8 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  /** Extra environment for a specific agent's PTY only (e.g. GEMINI_API_KEY for agy). */
+  getAgentEnvironment?: (provider: string) => Promise<Record<string, string>>;
 };
 
 /**
@@ -655,6 +657,11 @@ export function handleShellConnection(
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
+        // Only agy PTYs receive agent secrets; the Claude and plain shells never do.
+        const agentEnvironment =
+          provider === 'agy' && dependencies.getAgentEnvironment
+            ? await dependencies.getAgentEnvironment(provider)
+            : {};
 
         shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
@@ -663,6 +670,7 @@ export function handleShellConnection(
           cwd: resolvedProjectPath,
           env: {
             ...process.env,
+            ...agentEnvironment,
             [prioritizedPath.key]: prioritizedPath.value,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
