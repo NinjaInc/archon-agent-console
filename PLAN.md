@@ -136,3 +136,10 @@ Decisions made along the way (beyond section 2):
 
 Not done / not verifiable here: cloudflared and Cloudflare credentials are absent, so tunnel routing, Access policy,
 passkey registration with a real authenticator and reboot persistence were not exercised end to end.
+
+- **D15 - LAN bind (user decision, 2026-11-18):** cloudflared lives on another host (APP01), so the console must be reachable
+  on this box's LAN address. `HOST` may now be one private RFC 1918 IPv4 that belongs to this machine, and only with
+  `ALLOW_LAN_BIND=true`; `0.0.0.0`, `::`, hostnames and public addresses are still refused (`server/shared/bind-host.ts`, tested).
+  Running live as a *user* systemd service (`~/.config/systemd/user/archon-agent-console.service`, linger on) under `dev`,
+  bound to 192.168.1.84:3001, env in `~/.config/archon-agent-console/env` (0600). Cloudflare Access verification is OFF until the
+  Access app exists. Plain-http LAN access cannot sign in (passkeys + `__Host-` cookie need https); use the tunnel hostname.

@@ -85,11 +85,20 @@ test('CF_ACCESS_REQUIRED with no team domain or audience refuses to start (fails
   assert.notEqual(code, 0);
 });
 
-test('the server refuses to bind to anything but loopback', async () => {
+test('the server refuses wildcard binds', async () => {
   const port = await freePort();
   const server = start({ SERVER_PORT: String(port), HOST: '0.0.0.0' });
   const code = await Promise.race([server.exited, new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 45_000))]);
   assert.notEqual(code, 'timeout');
   assert.equal(code, 1);
-  assert.match(server.output(), /not a loopback address/);
+  assert.match(server.output(), /never allowed|not loopback/);
+});
+
+test('the server refuses a LAN address unless ALLOW_LAN_BIND=true', async () => {
+  const port = await freePort();
+  const server = start({ SERVER_PORT: String(port), HOST: '192.168.1.84', ALLOW_LAN_BIND: '' });
+  const code = await Promise.race([server.exited, new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 45_000))]);
+  assert.notEqual(code, 'timeout');
+  assert.equal(code, 1);
+  assert.match(server.output(), /ALLOW_LAN_BIND=true/);
 });

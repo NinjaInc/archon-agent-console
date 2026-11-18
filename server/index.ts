@@ -70,6 +70,7 @@ import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
+import { evaluateBindHost } from './shared/bind-host.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -326,13 +327,16 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-// The console is only ever reached through the local tunnel/reverse proxy, so it binds to
-// loopback and refuses to start on anything else (0.0.0.0, a LAN address, ::).
+// Loopback by default. A single private LAN address is allowed only with ALLOW_LAN_BIND=true
+// (see server/shared/bind-host.ts); 0.0.0.0, ::, hostnames and public addresses are refused.
 const HOST = process.env.HOST || '127.0.0.1';
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
-if (!LOOPBACK_HOSTS.has(HOST)) {
-    console.error(`[FATAL] HOST=${HOST} is not a loopback address. Archon Agent Console only binds to 127.0.0.1.`);
+const bindDecision = evaluateBindHost(HOST);
+if (!bindDecision.ok) {
+    console.error(`[FATAL] ${bindDecision.reason}`);
     process.exit(1);
+}
+if (bindDecision.lan) {
+    console.warn(`[WARN] Listening on LAN address ${HOST} (ALLOW_LAN_BIND=true). Passkey auth still applies; keep this port firewalled from the internet.`);
 }
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
