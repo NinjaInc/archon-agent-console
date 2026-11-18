@@ -93,6 +93,7 @@ export const authenticateToken = middleware.authenticateToken;
 export const enforceOrigin = middleware.enforceOrigin;
 export const isAllowedOrigin = middleware.isAllowedOrigin;
 export const authenticateWebSocket = middleware.authenticateWebSocket;
+export const isSessionActive = middleware.isSessionActive;
 export const authConfig = config;
 
 /** Startup hook: prints a one-time bootstrap token on the console while no passkey exists. */

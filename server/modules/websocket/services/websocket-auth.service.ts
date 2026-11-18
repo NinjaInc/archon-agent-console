@@ -4,7 +4,9 @@ import type { VerifyClientCallbackSync } from 'ws';
 
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
-type WebSocketAuthDependencies = {
+export type WebSocketAuthDependencies = {
+  /** Polled for open sockets; false closes the socket (revoked passkey, logout, idle or absolute timeout). */
+  isSessionActive: (request: IncomingMessage) => boolean;
   /** True when the Origin header is exactly this app's origin. */
   isAllowedOrigin: (origin: string | undefined) => boolean;
   /** Authenticates the upgrade from its session cookie; null when missing, expired or revoked. */

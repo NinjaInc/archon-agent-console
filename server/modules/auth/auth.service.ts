@@ -194,7 +194,7 @@ export function createAuthService(dependencies: AuthDependencies) {
   }
 
   /** Resolves a session cookie value to its principal, enforcing revocation, idle and absolute expiry. */
-  function validateSession(token: string | null | undefined): AuthenticatedPrincipal | null {
+  function validateSession(token: string | null | undefined, options: { touch?: boolean } = {}): AuthenticatedPrincipal | null {
     if (!token) {
       return null;
     }
@@ -212,7 +212,8 @@ export function createAuthService(dependencies: AuthDependencies) {
     if (!user) {
       return null;
     }
-    if (current - session.last_seen_at > SESSION_TOUCH_INTERVAL_MS) {
+    // Re-validation of an open websocket must not count as user activity, or an idle tab would never time out.
+    if (options.touch !== false && current - session.last_seen_at > SESSION_TOUCH_INTERVAL_MS) {
       store.touchSession(tokenHash, current);
     }
     return { userId: user.id, username: user.username, passkeyId: session.passkey_id, sessionHash: tokenHash };

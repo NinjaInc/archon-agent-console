@@ -62,6 +62,10 @@ export function createAuthMiddleware(service: AuthService, appOrigin: string) {
     authenticateToken,
     enforceOrigin,
     isAllowedOrigin: (origin: string | undefined): boolean => origin === appOrigin,
+    /** True while the session behind an open websocket is still valid; does not count as user activity. */
+    isSessionActive(request: IncomingMessage): boolean {
+      return service.validateSession(readSessionCookie(request.headers.cookie), { touch: false }) !== null;
+    },
     /** WebSocket upgrades authenticate with the same session cookie; returns null when it is missing or invalid. */
     authenticateWebSocket(request: IncomingMessage): { userId: number; username: string } | null {
       const principal: AuthenticatedPrincipal | null = service.validateSession(readSessionCookie(request.headers.cookie));

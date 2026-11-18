@@ -45,6 +45,7 @@ test.before(async () => {
       RP_ID: 'localhost',
       WORKSPACES_ROOT: path.join(sandbox, 'home', 'projects'),
       BOOTSTRAP_TOKEN: '',
+      WS_SESSION_RECHECK_MS: '400',
       VITE_IS_PLATFORM: 'false',
     },
     // Own process group so the whole npx -> tsx -> node tree can be killed together.
@@ -166,8 +167,14 @@ test('passkey registration over HTTP sets a hardened cookie that unlocks the API
   // Registration is closed to bootstrap tokens now.
   assert.equal((await post('/api/auth/register/options', { bootstrapToken })).status, 401);
 
+  // An already-open shell socket is dropped by the server when its session is revoked.
+  const liveSocket = new WebSocket(`ws://127.0.0.1:${freePort}/shell`, { headers: { origin: ORIGIN, cookie } });
+  await new Promise<void>((resolve, reject) => { liveSocket.once('open', () => resolve()); liveSocket.once('error', reject); });
+  const closedWith = new Promise<number>((resolve) => liveSocket.once('close', (code) => resolve(code)));
+
   // Logout revokes server-side.
   assert.equal((await post('/api/auth/logout', {}, { cookie })).status, 200);
+  assert.equal(await Promise.race([closedWith, new Promise<number>((r) => setTimeout(() => r(-1), 5000))]), 4401, 'open socket must be closed after revocation');
   assert.equal((await fetch(`${BASE}/api/auth/user`, { headers: { cookie } })).status, 401);
   assert.equal(await wsOutcome('/shell', { origin: ORIGIN, cookie }), 401);
 

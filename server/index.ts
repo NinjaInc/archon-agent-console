@@ -28,6 +28,7 @@ import {
     authConfig,
     enforceOrigin,
     isAllowedOrigin,
+    isSessionActive,
     prepareAuthAtStartup,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
@@ -111,6 +112,7 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 createWebSocketServer(server, {
     verifyClient: {
         isAllowedOrigin,
+        isSessionActive,
         authenticateWebSocket,
     },
     chat: {
