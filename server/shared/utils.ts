@@ -184,7 +184,30 @@ export function errorMessage(error: unknown): string {
  * This is resolved from `WORKSPACES_ROOT` when configured; otherwise it falls
  * back to the current user's home directory.
  */
-export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
+function resolveWorkspaceRoots(): string[] {
+  // PROJECTS_ROOTS (comma separated) is the Archon setting; WORKSPACES_ROOT is the upstream name.
+  const configured = (process.env.PROJECTS_ROOTS || process.env.WORKSPACES_ROOT || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => (entry.startsWith('~') ? path.join(os.homedir(), entry.slice(1)) : path.resolve(entry)));
+  if (configured.length > 0) {
+    return configured;
+  }
+  // Default to the folders a dev server keeps work in rather than the whole home directory
+  // (which holds ~/.ssh, ~/.config/gh and other credentials).
+  const defaults = ['projects', 'src', 'drive'].map((name) => path.join(os.homedir(), name)).filter((entry) => fs.existsSync(entry));
+  return defaults.length > 0 ? defaults : [os.homedir()];
+}
+
+/**
+ * Every folder the file explorer, shell working directory and new-project flow may use.
+ * Always contains at least one entry; paths are checked against these after symlink resolution.
+ */
+export const WORKSPACE_ROOTS = resolveWorkspaceRoots();
+
+/** The first workspace root: where browsing starts and where `~` points in the folder picker. */
+export const WORKSPACES_ROOT = WORKSPACE_ROOTS[0];
 
 /**
  * System-critical paths that must never be used as workspace roots.
@@ -424,14 +447,20 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    const resolvedWorkspaceRoots: string[] = [];
+    for (const workspaceRoot of WORKSPACE_ROOTS) {
+      try {
+        resolvedWorkspaceRoots.push(normalizeProjectPath(await realpath(workspaceRoot)));
+      } catch {
+        // A configured root that does not exist (yet) cannot contain anything.
+      }
+    }
+    const isInsideWorkspaceRoots = (candidate: string) =>
+      resolvedWorkspaceRoots.some((root) => candidate === root || candidate.startsWith(`${root}${path.sep}`));
+    if (!isInsideWorkspaceRoots(resolvedPath)) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
+        error: `Workspace path must be within the allowed workspace roots: ${WORKSPACE_ROOTS.join(', ')}`,
       };
     }
 
@@ -442,10 +471,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        if (!isInsideWorkspaceRoots(normalizeProjectPath(realSymlinkPath))) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',
