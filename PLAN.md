@@ -116,3 +116,23 @@ by the `LLMProvider` union.
   `~/projects/NinjaInc/*` are discoverable as projects; `~/drive` (rclone mirror: Outputs/Images,
   Documents, Media, Inbox, Backups) is browsable. Drive is a *mirror*: editing there only syncs
   when `drive-sync push` runs - the console does not run it automatically.
+
+## 6. Outcome (updated at end of run)
+
+Decisions made along the way (beyond section 2):
+- **D8 - npm 12 install:** lockfile `resolved` URLs pointed at registry.npmmirror.com for 24 packages and npm 12 refuses
+  that. Repointed to registry.npmjs.org (integrity hashes unchanged). Install scripts allow-listed only for
+  bcrypt, better-sqlite3, node-pty, esbuild, sharp.
+- **D9 - passkey sessions** also cover live sockets: open websockets/PTYs re-check the session every 15 s (no activity touch).
+- **D10 - `/api/agent`** now requires a signed-in session in addition to its API key. `/api/browser-use-mcp` keeps its
+  local-token auth and is exempt only from the Origin check.
+- **D11 - platform mode** (auth bypass) is refused at startup.
+- **D12 - file explorer:** project paths resolve through realpath; a project outside `PROJECTS_ROOTS` (e.g. `/home/dev`
+  itself, which holds `~/.ssh`) is not browsable/writable. Default roots are `~/projects,~/src,~/drive`.
+- **D13 - agy API key** lives in an owner-only file (`~/.cloudcli/agy.env`), not in agy's settings.json, and is injected
+  only into agy PTYs. API only so far; no settings-screen control yet.
+- **D14 - service install not applied on this box:** `deploy/install.sh` is written and syntax-checked but not run, because
+  running as a dedicated `archon` user changes which repos and `claude`/`agy` logins the agents can see (needs your call).
+
+Not done / not verifiable here: cloudflared and Cloudflare credentials are absent, so tunnel routing, Access policy,
+passkey registration with a real authenticator and reboot persistence were not exercised end to end.
