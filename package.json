@@ -62,7 +62,8 @@
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
-    "update:platform": "./update-platform.sh"
+    "update:platform": "./update-platform.sh",
+    "passkey:reset": "tsx --tsconfig server/tsconfig.json server/modules/auth/passkey-reset.cli.ts"
   },
   "build": {
     "appId": "ai.cloudcli.desktop",
@@ -184,6 +185,8 @@
     "@openai/codex-sdk": "^0.166.0",
     "@opencode-ai/sdk": "^1.19.5",
     "@replit/codemirror-minimap": "^0.5.2",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.1.0",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
     "@vscode/ripgrep": "^1.17.1",
@@ -203,10 +206,12 @@
     "cross-spawn": "^7.0.3",
     "dompurify": "^3.4.7",
     "express": "^4.18.2",
+    "express-rate-limit": "^8.7.4",
     "fuse.js": "^7.0.0",
     "gray-matter": "^4.0.3",
     "i18next": "^25.7.4",
     "ignore": "^7.0.6",
+    "jose": "^6.2.17",
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
     "katex": "^0.16.25",

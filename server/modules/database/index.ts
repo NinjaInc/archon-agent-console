@@ -19,6 +19,9 @@ export type {
   SessionDraftRecord,
 } from '@/modules/database/repositories/session-drafts.db.js';
 export { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
+// authStoreDb: used by the Auth module to persist passkeys, login sessions and bootstrap tokens.
+export { authStoreDb } from '@/modules/database/repositories/auth-store.js';
+export type { PasskeyRow, AuthSessionRow } from '@/modules/database/repositories/auth-store.js';
 export { userDb } from '@/modules/database/repositories/users.js';
 // userPreferencesDb: used by the User module to persist the settings that used to live in browser localStorage.
 export { userPreferencesDb } from '@/modules/database/repositories/user-preferences.db.js';

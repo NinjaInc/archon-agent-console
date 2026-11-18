@@ -25,7 +25,10 @@ import {
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
-    validateApiKey,
+    authConfig,
+    enforceOrigin,
+    isAllowedOrigin,
+    prepareAuthAtStartup,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
@@ -107,7 +110,7 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 
 createWebSocketServer(server, {
     verifyClient: {
-        isPlatform: IS_PLATFORM,
+        isAllowedOrigin,
         authenticateWebSocket,
     },
     chat: {
@@ -128,7 +131,19 @@ createWebSocketServer(server, {
     getPluginPort,
 });
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+// Passkey-only deployment: the platform auth bypass must never be active.
+if (IS_PLATFORM) {
+    console.error('[FATAL] Platform mode disables authentication and cannot be used with passkey login.');
+    process.exit(1);
+}
+
+// Behind cloudflared the TCP peer is 127.0.0.1; trust only loopback proxies so
+// X-Forwarded-For (the real client IP, used for rate limiting) cannot be spoofed by direct clients.
+app.set('trust proxy', 'loopback');
+app.disable('x-powered-by');
+
+// Same-origin only: the browser app is served from this origin, so CORS is not opened to anyone else.
+app.use(cors({ origin: authConfig.origin, credentials: true, exposedHeaders: ['X-Auth-Error'] }));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -152,8 +167,9 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Optional API key validation (if configured)
-app.use('/api', validateApiKey);
+// Reject cross-origin state-changing requests. The Browser MCP bridge is called by a local
+// subprocess with its own secret token and has no browser Origin.
+app.use('/api', enforceOrigin(['/browser-use-mcp']));
 
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
@@ -205,8 +221,8 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
 
-// Agent API Routes (uses API key authentication)
-app.use('/api/agent', agentRoutes);
+// Agent API: requires a signed-in session in addition to its API key (no unauthenticated agent execution).
+app.use('/api/agent', authenticateToken, agentRoutes);
 
 app.use('/api/voice', authenticateToken, voiceRoutes);
 
@@ -340,6 +356,9 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Arms and prints the one-time bootstrap token while no passkey exists.
+        prepareAuthAtStartup();
 
         // Configure Web Push (VAPID keys)
         configureWebPush();
