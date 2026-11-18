@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
+import { browserSupportsWebAuthn, startAuthentication, startRegistration } from '@simplewebauthn/browser';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import { api, readApiErrorMessage } from '@/shared/api';
-import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken } from '@/shared/authToken';
+import { AUTH_SESSION_EXPIRED_EVENT } from '@/shared/authToken';
 import { hydrateChatDrafts, resetChatDrafts } from '@/shared/chatDrafts';
 import { hydrateUserPreferences, resetUserPreferences } from '@/shared/userSettings';
+
 /** The signed-in account held by AuthContext - a required `username` plus an optional id and any additional fields the auth API returns - and should be read through `useAuth()` rather than re-derived from raw auth responses. */
 type AuthUser = {
   id?: number | string;
@@ -14,29 +16,30 @@ type AuthUser = {
   [key: string]: unknown;
 };
 
-const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
-
 const AUTH_ERROR_MESSAGES = {
   authStatusCheckFailed: 'errors.authStatusCheckFailed',
   loginFailed: 'errors.loginFailed',
   registrationFailed: 'errors.registrationFailed',
   networkError: 'errors.networkError',
   sessionExpired: 'errors.sessionExpired',
+  passkeysUnsupported: 'errors.passkeysUnsupported',
+  cancelled: 'errors.passkeyCancelled',
 } as const;
 
 type AuthActionResult = { success: true } | { success: false; error: string };
 
-type AuthSessionPayload = {
-  token?: string;
-  user?: AuthUser;
-};
-
 type AuthStatusPayload = {
   needsSetup?: boolean;
+  isAuthenticated?: boolean;
 };
 
 type AuthUserPayload = {
   user?: AuthUser;
+};
+
+type CeremonyOptionsPayload = {
+  challengeId?: string;
+  options?: unknown;
 };
 
 type OnboardingStatusPayload = {
@@ -45,13 +48,14 @@ type OnboardingStatusPayload = {
 
 type AuthContextValue = {
   user: AuthUser | null;
-  token: string | null;
   isLoading: boolean;
   needsSetup: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<AuthActionResult>;
-  register: (username: string, password: string) => Promise<AuthActionResult>;
+  /** Signs in with a discoverable passkey (no username). */
+  loginWithPasskey: () => Promise<AuthActionResult>;
+  /** First-run only: registers the first passkey using the one-time token printed on the server console. */
+  setupWithPasskey: (bootstrapToken: string, name: string) => Promise<AuthActionResult>;
   logout: () => void;
   refreshOnboardingStatus: () => Promise<void>;
 };
@@ -59,6 +63,9 @@ type AuthContextValue = {
 type AuthProviderProps = {
   children: ReactNode;
 };
+
+// User activity pings keep the server's idle timer honest without a background poll.
+const ACTIVITY_PING_INTERVAL_MS = 60_000;
 
 async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   try {
@@ -70,16 +77,6 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const readStoredToken = (): string | null => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-
-const persistToken = (token: string) => {
-  storeAuthToken(token);
-};
-
-const clearStoredToken = () => {
-  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-};
-
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
@@ -89,11 +86,10 @@ export function useAuth(): AuthContextValue {
   return context;
 }
 
-/** Used by App to expose the session, and its login/logout actions, to every module through useAuth. */
+/** Used by App to expose the passkey session, and its login/logout actions, to every module through useAuth. */
 export function AuthProvider({ children }: AuthProviderProps) {
   const { t } = useTranslation('auth');
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
@@ -101,8 +97,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const clearSession = useCallback(() => {
     setUser(null);
-    setToken(null);
-    clearStoredToken();
     // Otherwise the next person to sign in on this device would start out
     // looking at the previous user's theme, language, permissions and drafts.
     resetUserPreferences();
@@ -110,8 +104,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // Preferences live in auth.db, so they can only be fetched once there is a
-  // user to fetch them for. Until this resolves, every reader falls back to the
-  // localStorage mirror of the last known server state.
+  // user to fetch them for.
   const userKey = user ? String(user.id ?? user.username) : null;
   useEffect(() => {
     if (!userKey) {
@@ -141,58 +134,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await checkOnboardingStatus();
   }, [checkOnboardingStatus]);
 
-  const refreshSession = useCallback(async () => {
-    if (IS_PLATFORM || !token || !user) {
-      return;
-    }
-
-    try {
-      const response = await api.auth.refresh();
-      if (!response.ok) {
-        return;
-      }
-
-      const payload = await parseJsonSafely<AuthSessionPayload>(response);
-      if (isValidRefreshedToken(payload?.token)) {
-        setToken(payload.token);
-        persistToken(payload.token);
-      }
-    } catch (caughtError) {
-      // A transient network failure must not sign the user out. Focus/visibility
-      // and the next scheduled refresh will retry while the token remains valid.
-      console.warn('[Auth] Session refresh failed:', caughtError);
-    }
-  }, [token, user]);
-
-  useEffect(() => {
-    const handleTokenRefreshed = (event: Event) => {
-      const nextToken = (event as CustomEvent<unknown>).detail;
-      if (isValidRefreshedToken(nextToken)) {
-        setToken(nextToken);
-      }
-    };
-    const handleSessionExpired = () => {
-      clearSession();
-      setError(t(AUTH_ERROR_MESSAGES.sessionExpired));
-    };
-
-    window.addEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
-    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
-    return () => {
-      window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
-      window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
-    };
-  }, [clearSession, t]);
-
-  // The startup check below needs `t` only for its failure message.
-  // react-i18next gives `t` a new identity on every language change, so
-  // depending on it would re-run that check - and swap the whole app for the
-  // loading screen - whenever the language changes, including when sign-in
-  // adopts the language saved on another device.
+  // `t` changes identity on every language change; a ref keeps the startup check
+  // from re-running (and flashing the loading screen) when the language changes.
   const tRef = useRef(t);
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+
+  // The server ending the session (idle timeout, revocation, logout elsewhere) returns to the login screen.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      clearSession();
+      setError(tRef.current(AUTH_ERROR_MESSAGES.sessionExpired));
+    };
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, [clearSession]);
 
   const checkAuthStatus = useCallback(async () => {
     try {
@@ -206,31 +163,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setNeedsSetup(true);
         return;
       }
-
       setNeedsSetup(false);
 
-      // Read the stored token instead of depending on `token` state: this
-      // bootstrap flips `isLoading`, which swaps the whole app for the loading
-      // screen, so it must run once on mount and not again on every
-      // X-Refreshed-Token rotation (each one remounted the workspace, #1269).
-      if (!readStoredToken()) {
+      if (!statusPayload?.isAuthenticated) {
         return;
       }
 
       const userResponse = await api.auth.user();
-      if (!userResponse.ok) {
-        clearSession();
-        return;
-      }
-
-      const userPayload = await parseJsonSafely<AuthUserPayload>(userResponse);
+      const userPayload = userResponse.ok ? await parseJsonSafely<AuthUserPayload>(userResponse) : null;
       if (!userPayload?.user) {
         clearSession();
         return;
       }
 
-      setUser(userPayload.user);
       await checkOnboardingStatus();
+      setUser(userPayload.user);
     } catch (caughtError) {
       console.error('[Auth] Auth status check failed:', caughtError);
       setError(tRef.current(AUTH_ERROR_MESSAGES.authStatusCheckFailed));
@@ -252,119 +199,122 @@ export function AuthProvider({ children }: AuthProviderProps) {
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
 
+  // While signed in, real user activity (not timers) tells the server the session is in use.
   useEffect(() => {
-    if (IS_PLATFORM || !token || !user) {
+    if (IS_PLATFORM || !user) {
       return undefined;
     }
-
-    const refreshIfNeeded = () => {
-      const refreshDelay = getAuthTokenRefreshDelay(token);
-      if (refreshDelay !== null && refreshDelay <= 0) {
-        void refreshSession();
+    let lastPing = Date.now();
+    const handleActivity = () => {
+      const current = Date.now();
+      if (current - lastPing < ACTIVITY_PING_INTERVAL_MS) {
+        return;
       }
+      lastPing = current;
+      void api.auth.status().catch(() => undefined);
     };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshIfNeeded();
-      }
-    };
+    const events = ['pointerdown', 'keydown', 'focus'] as const;
+    events.forEach((name) => window.addEventListener(name, handleActivity, { passive: true }));
+    return () => events.forEach((name) => window.removeEventListener(name, handleActivity));
+  }, [user]);
 
-    const refreshDelay = getAuthTokenRefreshDelay(token);
-    const refreshTimer = refreshDelay === null
-      ? null
-      : window.setTimeout(() => void refreshSession(), refreshDelay);
+  const failWith = useCallback((message: string): AuthActionResult => {
+    setError(message);
+    return { success: false, error: message };
+  }, []);
 
-    window.addEventListener('focus', refreshIfNeeded);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+  /** Maps a cancelled/blocked browser prompt to a friendly message instead of a stack trace. */
+  const describeCeremonyError = useCallback((caughtError: unknown, fallbackKey: string): string => {
+    if (caughtError instanceof Error && caughtError.name === 'NotAllowedError') {
+      return t(AUTH_ERROR_MESSAGES.cancelled);
+    }
+    console.error('[Auth] Passkey ceremony failed:', caughtError);
+    return t(fallbackKey);
+  }, [t]);
 
-    return () => {
-      if (refreshTimer !== null) {
-        window.clearTimeout(refreshTimer);
-      }
-      window.removeEventListener('focus', refreshIfNeeded);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [refreshSession, token, user]);
-
-  // ProtectedRoute shows the workspace as soon as there is a user, so the
-  // onboarding status is settled before the user is published; otherwise a
-  // user who still has to onboard would see the workspace mount for a whole
-  // round trip before Onboarding replaced it. The token is stored first
-  // because that request reads it from storage.
-  const publishSession = useCallback(async (nextUser: AuthUser, nextToken: string) => {
-    persistToken(nextToken);
+  const completeSignIn = useCallback(async () => {
+    const userResponse = await api.auth.user();
+    const userPayload = userResponse.ok ? await parseJsonSafely<AuthUserPayload>(userResponse) : null;
+    if (!userPayload?.user) {
+      return false;
+    }
     await checkOnboardingStatus();
-    setUser(nextUser);
-    setToken(nextToken);
+    setUser(userPayload.user);
     setNeedsSetup(false);
+    return true;
   }, [checkOnboardingStatus]);
 
-  const login = useCallback<AuthContextValue['login']>(
-    async (username, password) => {
-      try {
-        setError(null);
-        const response = await api.auth.login(username, password);
-        const payload = await parseJsonSafely<AuthSessionPayload>(response);
-
-        if (!response.ok || !payload?.token || !payload.user) {
-          // Most auth failures arrive as the structured AppError envelope; passing its
-          // `error` object on would render it as a React child and blank the screen.
-          const message = readApiErrorMessage(payload) ?? t(AUTH_ERROR_MESSAGES.loginFailed);
-          setError(message);
-          return { success: false, error: message };
-        }
-
-        await publishSession(payload.user, payload.token);
-        return { success: true };
-      } catch (caughtError) {
-        console.error('Login error:', caughtError);
-        setError(t(AUTH_ERROR_MESSAGES.networkError));
-        return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
+  const loginWithPasskey = useCallback<AuthContextValue['loginWithPasskey']>(async () => {
+    setError(null);
+    if (!browserSupportsWebAuthn()) {
+      return failWith(t(AUTH_ERROR_MESSAGES.passkeysUnsupported));
+    }
+    try {
+      const optionsResponse = await api.auth.loginOptions();
+      const begin = await parseJsonSafely<CeremonyOptionsPayload>(optionsResponse);
+      if (!optionsResponse.ok || !begin?.challengeId || !begin.options) {
+        return failWith(readApiErrorMessage(begin) ?? t(AUTH_ERROR_MESSAGES.loginFailed));
       }
-    },
-    [publishSession, t],
-  );
 
-  const register = useCallback<AuthContextValue['register']>(
-    async (username, password) => {
-      try {
-        setError(null);
-        const response = await api.auth.register(username, password);
-        const payload = await parseJsonSafely<AuthSessionPayload>(response);
-
-        if (!response.ok || !payload?.token || !payload.user) {
-          const message = readApiErrorMessage(payload) ?? t(AUTH_ERROR_MESSAGES.registrationFailed);
-          setError(message);
-          return { success: false, error: message };
-        }
-
-        await publishSession(payload.user, payload.token);
-        return { success: true };
-      } catch (caughtError) {
-        console.error('Registration error:', caughtError);
-        setError(t(AUTH_ERROR_MESSAGES.networkError));
-        return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
+      const assertion = await startAuthentication({ optionsJSON: begin.options as Parameters<typeof startAuthentication>[0]['optionsJSON'] });
+      const verifyResponse = await api.auth.loginVerify({ challengeId: begin.challengeId, response: assertion });
+      if (!verifyResponse.ok) {
+        const payload = await parseJsonSafely<unknown>(verifyResponse);
+        return failWith(readApiErrorMessage(payload) ?? t(AUTH_ERROR_MESSAGES.loginFailed));
       }
-    },
-    [publishSession, t],
-  );
+
+      return (await completeSignIn()) ? { success: true } : failWith(t(AUTH_ERROR_MESSAGES.loginFailed));
+    } catch (caughtError) {
+      return failWith(describeCeremonyError(caughtError, AUTH_ERROR_MESSAGES.loginFailed));
+    }
+  }, [completeSignIn, describeCeremonyError, failWith, t]);
+
+  const setupWithPasskey = useCallback<AuthContextValue['setupWithPasskey']>(async (bootstrapToken, name) => {
+    setError(null);
+    if (!browserSupportsWebAuthn()) {
+      return failWith(t(AUTH_ERROR_MESSAGES.passkeysUnsupported));
+    }
+    try {
+      const optionsResponse = await api.auth.registerOptions(bootstrapToken.trim());
+      const begin = await parseJsonSafely<CeremonyOptionsPayload>(optionsResponse);
+      if (!optionsResponse.ok || !begin?.challengeId || !begin.options) {
+        return failWith(readApiErrorMessage(begin) ?? t(AUTH_ERROR_MESSAGES.registrationFailed));
+      }
+
+      const attestation = await startRegistration({ optionsJSON: begin.options as Parameters<typeof startRegistration>[0]['optionsJSON'] });
+      const verifyResponse = await api.auth.registerVerify({
+        challengeId: begin.challengeId,
+        response: attestation,
+        name: name.trim() || undefined,
+        bootstrapToken: bootstrapToken.trim(),
+      });
+      if (!verifyResponse.ok) {
+        const payload = await parseJsonSafely<unknown>(verifyResponse);
+        return failWith(readApiErrorMessage(payload) ?? t(AUTH_ERROR_MESSAGES.registrationFailed));
+      }
+
+      return (await completeSignIn()) ? { success: true } : failWith(t(AUTH_ERROR_MESSAGES.registrationFailed));
+    } catch (caughtError) {
+      return failWith(describeCeremonyError(caughtError, AUTH_ERROR_MESSAGES.registrationFailed));
+    }
+  }, [completeSignIn, describeCeremonyError, failWith, t]);
 
   const logout = useCallback(() => {
-    // JWT logout is client-side: the server endpoint does not maintain a
-    // revocation list, so clearing the session is the complete operation.
-    clearSession();
+    // Revocation is server-side: the session row is revoked and the cookie cleared.
+    void api.auth.logout().catch(() => undefined).finally(() => {
+      clearSession();
+    });
   }, [clearSession]);
 
   const contextValue = useMemo<AuthContextValue>(
     () => ({
       user,
-      token,
       isLoading,
       needsSetup,
       hasCompletedOnboarding,
       error,
-      login,
-      register,
+      loginWithPasskey,
+      setupWithPasskey,
       logout,
       refreshOnboardingStatus,
     }),
@@ -372,12 +322,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       error,
       hasCompletedOnboarding,
       isLoading,
-      login,
+      loginWithPasskey,
       logout,
       needsSetup,
       refreshOnboardingStatus,
-      register,
-      token,
+      setupWithPasskey,
       user,
     ],
   );

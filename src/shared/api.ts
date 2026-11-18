@@ -1,8 +1,4 @@
-import {
-  expireAuthSession,
-  getStoredAuthToken,
-  storeAuthToken,
-} from '@/shared/authToken';
+import { expireAuthSession } from '@/shared/authToken';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
 
@@ -17,8 +13,6 @@ export const authenticatedFetch = (
   url: string,
   options: ApiRequestOptions = {},
 ): Promise<Response> => {
-  const token = getStoredAuthToken();
-
   const defaultHeaders: Record<string, string> = {};
 
   // Only set Content-Type for non-FormData requests
@@ -26,27 +20,18 @@ export const authenticatedFetch = (
     defaultHeaders['Content-Type'] = 'application/json';
   }
 
-  if (!IS_PLATFORM && token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
-  }
-
   return fetch(url, {
     ...options,
-    // Every response here can carry X-Refreshed-Token or X-Auth-Error, and a
-    // served-from-cache response replays the headers it was stored with. Those
-    // headers describe one moment in one session, so they must never be reused:
-    // a stale X-Refreshed-Token overwrote the current token with an expired one
-    // on every start, which then got discarded as expired.
+    // The passkey session is an HttpOnly cookie the browser sends on same-origin
+    // requests. X-Auth-Error describes one moment in one session, so a cached
+    // response must never be replayed.
+    credentials: 'same-origin',
     cache: 'no-store',
     headers: {
       ...defaultHeaders,
       ...options.headers,
     },
   }).then((response) => {
-    const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (refreshedToken) {
-      storeAuthToken(refreshedToken);
-    }
     // Belt and braces for any path that still reaches a cached response: only a
     // real rejection ends the session. Note that a revalidated response surfaces
     // its stored status (typically 200), not the 304 from the wire, so the
@@ -200,19 +185,44 @@ const pluginAssetPath = (pluginName: string, assetFile: string) =>
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username: string, password: string) => fetch('/api/auth/login', {
+    status: () => fetch('/api/auth/status', { credentials: 'same-origin', cache: 'no-store' }),
+    // WebAuthn ceremonies. Each begins with an options request and ends with a verify request.
+    // These deliberately use plain fetch: a 401 here is an expected answer, not an expired session.
+    registerOptions: (bootstrapToken?: string) => fetch('/api/auth/register/options', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ bootstrapToken }),
     }),
-    register: (username: string, password: string) => fetch('/api/auth/register', {
+    registerVerify: (body: { challengeId: string; response: unknown; name?: string; bootstrapToken?: string }) =>
+      fetch('/api/auth/register/verify', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    loginOptions: () => fetch('/api/auth/login/options', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: '{}',
     }),
-    refresh: () => post('/api/auth/refresh'),
+    loginVerify: (body: { challengeId: string; response: unknown }) => fetch('/api/auth/login/verify', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
     user: () => get('/api/auth/user'),
+    logout: () => fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }),
+    listPasskeys: () => get('/api/auth/passkeys'),
+    revokePasskey: (credentialId: string) => del(`/api/auth/passkeys/${encodeURIComponent(credentialId)}`),
+    revokeAllSessions: () => post('/api/auth/sessions/revoke-all'),
   },
 
   // Protected endpoints
@@ -253,15 +263,13 @@ export const api = {
     githubTokenId: number | null;
     newGithubToken: string | null;
   }) => post('/api/projects/clone', cloneRequest),
-  // EventSource cannot send an Authorization header, so the token rides along as
-  // a query parameter on the streaming endpoints below.
+  // EventSource sends the same-origin session cookie by itself, so no token is needed.
   cloneProjectProgressUrl: ({ cloneId }: { cloneId: string }) =>
-    `/api/projects/clone-progress${query({ cloneId, token: getStoredAuthToken() })}`,
+    `/api/projects/clone-progress${query({ cloneId })}`,
   searchConversationsUrl: (searchQuery: string, limit = 50) =>
     `/api/providers/search/sessions${query({
       q: searchQuery,
       limit,
-      token: getStoredAuthToken(),
     })}`,
 
   // Session endpoints. Provider/project metadata are resolved by the backend

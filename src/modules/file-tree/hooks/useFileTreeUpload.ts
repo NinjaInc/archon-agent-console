@@ -4,7 +4,7 @@ import type { DragEvent } from 'react';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { FileTreeUploadProgressState, Project } from '@/shared/types';
 import { api } from '@/shared/api';
-import { expireAuthSession, getStoredAuthToken, storeAuthToken } from '@/shared/authToken';
+import { expireAuthSession } from '@/shared/authToken';
 import { MAX_FILE_UPLOAD_SIZE_BYTES, MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 
 type UseFileTreeUploadOptions = {
@@ -105,11 +105,7 @@ const uploadFormDataWithProgress = (
 
     xhr.open('POST', api.uploadFilesUrl(projectId));
 
-    const token = getStoredAuthToken();
-    if (!IS_PLATFORM && token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    }
-
+    // The same-origin session cookie is attached by the browser.
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) {
         return;
@@ -121,10 +117,6 @@ const uploadFormDataWithProgress = (
     };
 
     xhr.onload = () => {
-      const refreshedToken = xhr.getResponseHeader('X-Refreshed-Token');
-      if (refreshedToken) {
-        storeAuthToken(refreshedToken);
-      }
       if (xhr.getResponseHeader('X-Auth-Error')) {
         expireAuthSession();
       }

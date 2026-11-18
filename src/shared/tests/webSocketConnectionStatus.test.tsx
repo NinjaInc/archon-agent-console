@@ -145,16 +145,17 @@ test('a first attempt that fails reads as disconnected', () => {
   assert.equal(lastStatus(), 'connected');
 });
 
-test('a token refresh swaps the socket without ever reading as a lost connection', () => {
+test('a re-authenticated session swaps the socket without ever reading as a lost connection', () => {
   const view = renderProvider();
   act(() => socket(0).serverOpens());
 
-  AUTH.current = { ...AUTH.current, token: 'token-2' };
+  // A new sign-in publishes a new user object; the socket must be rebuilt for it.
+  AUTH.current = { ...AUTH.current, user: { id: AUTH.current.user?.id ?? 1 } };
   view.rerender(<WebSocketProvider><RecordStatus /></WebSocketProvider>);
 
-  assert.equal(FakeWebSocket.instances.length, 2, 'the refreshed token opened a new socket');
-  assert.equal(socket(0).readyState, FakeWebSocket.CLOSED, 'the old-token socket was closed');
-  assert.match(socket(1).url, /token=token-2/);
+  assert.equal(FakeWebSocket.instances.length, 2, 'the new session opened a new socket');
+  assert.equal(socket(0).readyState, FakeWebSocket.CLOSED, 'the old-session socket was closed');
+  assert.doesNotMatch(socket(1).url, /token=/, 'no credential rides in the websocket URL; the cookie authenticates it');
   // The new socket is still handshaking: not live yet, but not lost either.
   assert.equal(lastStatus(), 'connecting');
   assert.equal(isConnected, false);

@@ -8,6 +8,8 @@ type AuthInputFieldProps = {
   label: string;
   value: string;
   onChange: (nextValue: string) => void;
+  /** Defaults to true; set false for optional fields. */
+  isRequired?: boolean;
   placeholder: string;
   isDisabled: boolean;
   type?: 'text' | 'password' | 'email';
@@ -28,6 +30,7 @@ export default function AuthInputField({
   label,
   value,
   onChange,
+  isRequired = true,
   placeholder,
   isDisabled,
   type = 'text',
@@ -61,7 +64,7 @@ export default function AuthInputField({
             Icon ? 'pl-10' : 'pl-3.5'
           } ${isPasswordField ? 'pr-11' : 'pr-3.5'}`}
           placeholder={placeholder}
-          required
+          required={isRequired}
           disabled={isDisabled}
         />
         {isPasswordField && (
