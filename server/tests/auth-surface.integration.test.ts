@@ -61,7 +61,7 @@ test.before(async () => {
     } catch { /* not up yet */ }
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
-  const match = output.match(/^\s{4}(\S{40,})\s*$/m);
+  const match = output.match(/^\s{4}((?:[A-HJKMNP-Z2-9]{4}-){5}[A-HJKMNP-Z2-9]{4})\s*$/m);
   assert.ok(match, `server must print a bootstrap token on first run.\n${output.slice(-800)}`);
   bootstrapToken = match[1];
 });

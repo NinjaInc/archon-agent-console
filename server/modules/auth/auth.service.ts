@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 
 import type {
   AuthenticationResponseJSON,
@@ -108,6 +108,34 @@ export type AuthenticatedPrincipal = { userId: number; username: string; passkey
 const MAX_PENDING_CHALLENGES = 500;
 const SESSION_TOUCH_INTERVAL_MS = 30_000;
 const MIN_ENV_BOOTSTRAP_TOKEN_LENGTH = 24;
+
+//----------------- READABLE SETUP TOKENS ------------
+// Setup tokens are typed or pasted by a person, so they use an alphabet without lookalike
+// characters (no 0/O, 1/I/L) and are printed in groups of four: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX.
+// 31 symbols x 24 positions is about 119 bits of entropy.
+const READABLE_TOKEN_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const READABLE_TOKEN_LENGTH = 24;
+const READABLE_TOKEN_GROUP = 4;
+
+function generateReadableToken(): string {
+  const chars = Array.from({ length: READABLE_TOKEN_LENGTH }, () => READABLE_TOKEN_ALPHABET[randomInt(READABLE_TOKEN_ALPHABET.length)]);
+  return groupToken(chars.join(''));
+}
+
+function groupToken(compact: string): string {
+  return compact.match(new RegExp(`.{1,${READABLE_TOKEN_GROUP}}`, 'g'))?.join('-') ?? compact;
+}
+
+/**
+ * Forms a pasted token may legitimately take: exactly as given, and the canonical readable form
+ * (case-insensitive, spaces/hyphens ignored). Tokens supplied by BOOTSTRAP_TOKEN only match exactly.
+ */
+function bootstrapTokenCandidates(token: string): string[] {
+  const compact = token.toUpperCase().replace(/[\s-]/g, '');
+  const canonical = compact.length === READABLE_TOKEN_LENGTH ? groupToken(compact) : null;
+  return canonical && canonical !== token ? [token, canonical] : [token];
+}
+// ---------------------------
 const OWNER_USER_HANDLE = new TextEncoder().encode('archon-console-owner');
 
 function sha256Hex(value: string): string {
@@ -219,21 +247,29 @@ export function createAuthService(dependencies: AuthDependencies) {
     return { userId: user.id, username: user.username, passkeyId: session.passkey_id, sessionHash: tokenHash };
   }
 
-  function bootstrapTokenIsLive(token: unknown): token is string {
+  /** Returns the stored hash of the live bootstrap token matching the input, or null. */
+  function liveBootstrapTokenHash(token: unknown): string | null {
     if (typeof token !== 'string' || token.length < 16 || token.length > 256) {
-      return false;
+      return null;
     }
-    const record = store.getBootstrapToken(sha256Hex(token));
-    return Boolean(record && record.used_at === null && record.expires_at > now());
+    for (const candidate of bootstrapTokenCandidates(token)) {
+      const hash = sha256Hex(candidate);
+      const record = store.getBootstrapToken(hash);
+      if (record && record.used_at === null && record.expires_at > now()) {
+        return hash;
+      }
+    }
+    return null;
   }
 
   /** Decides who may register a passkey: a bootstrap token while none exist, otherwise a live session. */
   function authoriseRegistration(input: { bootstrapToken?: unknown; sessionToken?: string | null }): NonNullable<ChallengeRecord['authorisedBy']> {
     if (store.countPasskeys() === 0) {
-      if (!bootstrapTokenIsLive(input.bootstrapToken)) {
+      const tokenHash = liveBootstrapTokenHash(input.bootstrapToken);
+      if (!tokenHash) {
         throw new AppError('A valid, unexpired bootstrap token is required.', { code: 'AUTH_BOOTSTRAP_INVALID', statusCode: 401 });
       }
-      return { mode: 'bootstrap', tokenHash: sha256Hex(input.bootstrapToken) };
+      return { mode: 'bootstrap', tokenHash };
     }
     const principal = validateSession(input.sessionToken);
     if (!principal) {
@@ -264,7 +300,7 @@ export function createAuthService(dependencies: AuthDependencies) {
           statusCode: 500,
         });
       }
-      const token = explicitToken ?? randomBytes(32).toString('base64url');
+      const token = explicitToken ?? generateReadableToken();
       const current = now();
       store.insertBootstrapToken({
         token_hash: sha256Hex(token),

@@ -293,7 +293,7 @@ test('an env-provided bootstrap token must be long enough', () => {
 test('startup arms a token only while no passkey exists', async () => {
   resetState();
   const armed = service.ensureBootstrapAtStartup(undefined);
-  assert.ok(armed && armed.token.length >= 40);
+  assert.ok(armed && armed.token.length >= 24);
   await registerFirstPasskey(new VirtualAuthenticator(RP_ID, ORIGIN));
   assert.equal(service.ensureBootstrapAtStartup(undefined), null);
 });
@@ -301,4 +301,41 @@ test('startup arms a token only while no passkey exists', async () => {
 test.after(() => {
   getConnection().close();
   fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('generated setup tokens are readable: grouped, no lookalike characters', () => {
+  resetState();
+  for (let i = 0; i < 25; i += 1) {
+    const { token } = service.issueBootstrapToken();
+    assert.match(token, /^([A-HJKMNP-Z2-9]{4}-){5}[A-HJKMNP-Z2-9]{4}$/, token);
+  }
+});
+
+test('a pasted setup token still works in lowercase, without hyphens, or with stray spaces', async () => {
+  for (const mangle of [
+    (t: string) => t.toLowerCase(),
+    (t: string) => t.replace(/-/g, ''),
+    (t: string) => `  ${t.toLowerCase().replace(/-/g, ' ')} `,
+  ]) {
+    resetState();
+    const { token } = service.issueBootstrapToken();
+    const { options } = await service.beginRegistration({ bootstrapToken: mangle(token) });
+    assert.ok(options.challenge);
+  }
+});
+
+test('a wrong or lookalike-altered setup token is still refused', async () => {
+  resetState();
+  const { token } = service.issueBootstrapToken();
+  const wrong = `${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`;
+  await assert.rejects(service.beginRegistration({ bootstrapToken: wrong }), { code: 'AUTH_BOOTSTRAP_INVALID' });
+});
+
+test('an env-provided BOOTSTRAP_TOKEN must still match exactly (no case folding)', async () => {
+  resetState();
+  const custom = 'My-Own-Custom-Setup-Token-2026';
+  service.issueBootstrapToken(custom);
+  await assert.rejects(service.beginRegistration({ bootstrapToken: custom.toUpperCase() }), { code: 'AUTH_BOOTSTRAP_INVALID' });
+  const { options } = await service.beginRegistration({ bootstrapToken: custom });
+  assert.ok(options.challenge);
 });
