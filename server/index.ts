@@ -9,7 +9,15 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import {
+    AppError,
+    findApplicationRoot,
+    getModuleDirectory,
+    IS_PLATFORM,
+    resolvePathUnderRoots,
+    terminalTextStyles,
+    WORKSPACE_ROOTS,
+} from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -55,6 +63,7 @@ import {
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { agyRoutes, getAgyLaunchEnvironment } from './modules/agy/index.js';
+import { cfAccessGate, isCfAccessRequired, verifyCfAccessUpgrade } from './modules/cf-access/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
@@ -114,11 +123,14 @@ createWebSocketServer(server, {
         isAllowedOrigin,
         isSessionActive,
         authenticateWebSocket,
+        verifyEdgeAccess: verifyCfAccessUpgrade,
     },
     chat: {
         runtime: providerRuntimeService,
     },
     shell: {
+        // Terminals may only start inside the configured projects roots.
+        resolveAllowedProjectPath: (candidate) => resolvePathUnderRoots(candidate, WORKSPACE_ROOTS),
         getAgentEnvironment: async (provider) =>
             provider === 'agy' ? getAgyLaunchEnvironment() : {},
         resolveProviderSessionId: (sessionId, provider) => {
@@ -132,6 +144,10 @@ createWebSocketServer(server, {
     },
     getPluginPort,
 });
+
+// Cloudflare Access is the outer door: when CF_ACCESS_REQUIRED=true nothing (not even static files)
+// is served without a valid, signed Cf-Access-Jwt-Assertion. Passkeys remain the inner door.
+app.use(cfAccessGate);
 
 // Passkey-only deployment: the platform auth bypass must never be active.
 if (IS_PLATFORM) {
@@ -158,6 +174,12 @@ app.use(express.json({
     }
 }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Minimal liveness probe for systemd/monitoring: no version, paths or other details.
+app.get('/healthz', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ status: 'ok' });
+});
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
@@ -304,7 +326,14 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+// The console is only ever reached through the local tunnel/reverse proxy, so it binds to
+// loopback and refuses to start on anything else (0.0.0.0, a LAN address, ::).
+const HOST = process.env.HOST || '127.0.0.1';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+if (!LOOPBACK_HOSTS.has(HOST)) {
+    console.error(`[FATAL] HOST=${HOST} is not a loopback address. Archon Agent Console only binds to 127.0.0.1.`);
+    process.exit(1);
+}
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
@@ -358,6 +387,8 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        console.log(`${terminalTextStyles.info('[INFO]')} Cloudflare Access verification: ${isCfAccessRequired ? 'REQUIRED' : 'off (set CF_ACCESS_REQUIRED=true behind the tunnel)'}`);
 
         // Arms and prints the one-time bootstrap token while no passkey exists.
         prepareAuthAtStartup();

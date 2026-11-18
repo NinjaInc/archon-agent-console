@@ -25,12 +25,18 @@ export type WebSocketAuthDependencies = {
  * Order: Origin (blocks cross-site websocket hijacking), then the session cookie.
  * Every path - /shell, /ws, plugin proxies - goes through here, so none is reachable unauthenticated.
  */
-export function verifyWebSocketClient(
+export async function verifyWebSocketClient(
   info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0],
   dependencies: WebSocketAuthDependencies
-): boolean {
+): Promise<boolean> {
   const request = info.req as AuthenticatedWebSocketRequest;
   const upgradePath = new URL(request.url ?? '/', 'http://localhost').pathname;
+
+  // Edge check first: when Cloudflare Access is required, nothing else is evaluated without it.
+  if (dependencies.verifyEdgeAccess && !(await dependencies.verifyEdgeAccess(request))) {
+    console.log('[WARN] WebSocket rejected: Cloudflare Access assertion missing or invalid', upgradePath);
+    return false;
+  }
 
   if (!dependencies.isAllowedOrigin(request.headers.origin)) {
     console.log('[WARN] WebSocket rejected: origin not allowed', upgradePath);

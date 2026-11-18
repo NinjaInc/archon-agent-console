@@ -121,6 +121,8 @@ type ShellWebSocketDependencies = {
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
   /** Extra environment for a specific agent's PTY only (e.g. GEMINI_API_KEY for agy). */
+  /** Returns the real path when `candidate` is inside an allowed projects root, otherwise null. */
+  resolveAllowedProjectPath?: (candidate: string) => Promise<string | null>;
   getAgentEnvironment?: (provider: string) => Promise<Record<string, string>>;
 };
 
@@ -627,7 +629,15 @@ export function handleShellConnection(
           return;
         }
 
-        const resolvedProjectPath = path.resolve(projectPath);
+        let resolvedProjectPath = path.resolve(projectPath);
+        if (dependencies.resolveAllowedProjectPath) {
+          const allowedPath = await dependencies.resolveAllowedProjectPath(resolvedProjectPath);
+          if (!allowedPath) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Project path is outside the allowed projects roots' }));
+            return;
+          }
+          resolvedProjectPath = allowedPath;
+        }
         try {
           const stats = fs.statSync(resolvedProjectPath);
           if (!stats.isDirectory()) {

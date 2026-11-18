@@ -798,3 +798,27 @@ test('only the agy pty receives the agent environment (API key never reaches oth
   assert.equal(envs[0]?.GEMINI_API_KEY, process.env.GEMINI_API_KEY);
   assert.equal(envs[1]?.GEMINI_API_KEY, 'test-secret-value-123456');
 });
+
+test('a terminal cannot be started outside the allowed projects roots', async () => {
+  let spawned = 0;
+  const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-root-'));
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    resolveAllowedProjectPath: async (candidate: string) => (candidate.startsWith(allowedRoot) ? candidate : null),
+    spawnPty: () => { spawned += 1; return createFakePty() as never; },
+  };
+
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit('message', JSON.stringify({ type: 'init', projectPath: '/etc', hasSession: false, provider: 'plain-shell', isPlainShell: true }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(spawned, 0, 'no shell may be spawned in /etc');
+  assert.match(socket.frames.join(''), /outside the allowed projects roots/);
+
+  const inside = createFakeSocket();
+  handleShellConnection(inside as never, dependencies);
+  inside.emit('message', JSON.stringify({ type: 'init', projectPath: allowedRoot, hasSession: false, provider: 'plain-shell', isPlainShell: true }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(spawned, 1);
+});

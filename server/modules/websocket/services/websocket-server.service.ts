@@ -89,9 +89,16 @@ export function createWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({
     server,
+    // Async form: the Cloudflare Access check may need to fetch the team JWKS.
     verifyClient: ((
-      info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0]
-    ) => verifyWebSocketClient(info, dependencies.verifyClient)),
+      info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0],
+      callback: (verified: boolean, code?: number, message?: string) => void,
+    ) => {
+      verifyWebSocketClient(info, dependencies.verifyClient).then(
+        (verified) => callback(verified, verified ? undefined : 401, verified ? undefined : 'Unauthorized'),
+        () => callback(false, 401, 'Unauthorized'),
+      );
+    }) as never,
   });
 
   wss.on('connection', (ws, request) => {
