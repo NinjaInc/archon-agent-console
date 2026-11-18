@@ -746,3 +746,30 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
     );
   });
 });
+
+test('agy launches in its own pty and never reattaches to the Claude shell of the same project', () => {
+  const spawnedCommands: string[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: (_shell: string, args: string | string[]) => {
+      spawnedCommands.push(Array.isArray(args) ? args[args.length - 1] : args);
+      return createFakePty() as never;
+    },
+  };
+  const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-shell-'));
+
+  const open = (provider: string) => {
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, dependencies);
+    socket.emit(
+      'message',
+      JSON.stringify({ type: 'init', projectPath, hasSession: false, provider }),
+    );
+  };
+
+  open('claude');
+  open('agy');
+
+  // Two spawns: agy did not reattach to the existing Claude pty.
+  assert.deepEqual(spawnedCommands, ['claude', 'agy']);
+});

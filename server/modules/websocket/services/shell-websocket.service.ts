@@ -243,6 +243,12 @@ function buildShellCommand(
     return otherProgram('codex');
   }
 
+  // Antigravity (agy) is terminal-only here. It needs a real TTY, which this
+  // node-pty launch provides; it has no resumable app session id to pass.
+  if (provider === 'agy') {
+    return otherProgram('agy');
+  }
+
   if (provider === 'opencode') {
     if (resumeSessionId) {
       return otherProgram(`opencode --session "${resumeSessionId}"`);
@@ -571,7 +577,10 @@ export function handleShellConnection(
           isPlainShell && initialCommand
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
-        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        // agy gets its own PTY slot: without this it would reattach to the
+        // Claude shell that already owns `<project>_default`.
+        const agentSuffix = provider === 'agy' ? '_agy' : '';
+        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}${agentSuffix}`;
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
@@ -787,9 +796,11 @@ export function handleShellConnection(
               ? 'Cursor'
               : provider === 'codex'
                 ? 'Codex'
-                : provider === 'opencode'
+                : provider === 'agy'
+                  ? 'Antigravity'
+                  : provider === 'opencode'
                     ? 'OpenCode'
-                  : 'Claude';
+                    : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
