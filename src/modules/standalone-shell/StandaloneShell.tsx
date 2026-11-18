@@ -10,6 +10,7 @@ type StandaloneShellProps = {
   session?: ProjectSession | null;
   command?: string | null;
   isPlainShell?: boolean | null;
+  agentOverride?: string | null;
   isActive?: boolean;
   autoConnect?: boolean;
   onComplete?: ((exitCode: number) => void) | null;
@@ -27,6 +28,7 @@ export default function StandaloneShell({
   session = null,
   command = null,
   isPlainShell = null,
+  agentOverride = null,
   isActive = true,
   autoConnect = true,
   onComplete = null,
@@ -68,6 +70,7 @@ export default function StandaloneShell({
           selectedSession={session}
           initialCommand={command}
           isPlainShell={shouldUsePlainShell}
+          agentOverride={agentOverride}
           isActive={isActive}
           onProcessComplete={handleProcessComplete}
           minimal={minimal}

@@ -200,6 +200,19 @@ function WorkspaceMain({
             </div>
           )}
 
+          {activeTab === 'agy' && (
+            <div className="h-full w-full overflow-hidden">
+              {/* Antigravity runs as a terminal agent in the project directory. */}
+              <StandaloneShell
+                project={selectedProject}
+                session={null}
+                agentOverride="agy"
+                showHeader={false}
+                isActive={activeTab === 'agy'}
+              />
+            </div>
+          )}
+
           {activeTab === 'git' && (
             <div className="h-full overflow-hidden">
               <GitPanel

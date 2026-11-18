@@ -20,6 +20,8 @@ type UseShellConnectionOptions = {
   selectedSessionRef: MutableRefObject<ProjectSession | null | undefined>;
   initialCommandRef: MutableRefObject<string | null | undefined>;
   isPlainShellRef: MutableRefObject<boolean>;
+  // Forces a specific terminal agent (e.g. 'agy') instead of the session/selected provider.
+  agentOverrideRef?: MutableRefObject<string | null | undefined>;
   bypassPermissionsRef: MutableRefObject<boolean>;
   isDarkModeRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
@@ -47,6 +49,7 @@ export function useShellConnection({
   selectedSessionRef,
   initialCommandRef,
   isPlainShellRef,
+  agentOverrideRef,
   bypassPermissionsRef,
   isDarkModeRef,
   onProcessCompleteRef,
@@ -168,9 +171,12 @@ export function useShellConnection({
             sendSocketMessage(socket, {
               type: 'init',
               projectPath: currentProject.fullPath || currentProject.path || '',
-              sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id || null,
-              hasSession: isPlainShellRef.current ? false : Boolean(selectedSessionRef.current),
-              provider: isPlainShellRef.current ? 'plain-shell' : (selectedSessionRef.current?.__provider || readSelectedProvider()),
+              // An agent override (Antigravity tab) never resumes a chat session.
+              sessionId: isPlainShellRef.current || agentOverrideRef?.current ? null : selectedSessionRef.current?.id || null,
+              hasSession: isPlainShellRef.current || agentOverrideRef?.current ? false : Boolean(selectedSessionRef.current),
+              provider: isPlainShellRef.current
+                ? 'plain-shell'
+                : (agentOverrideRef?.current || selectedSessionRef.current?.__provider || readSelectedProvider()),
               cols: currentTerminal.cols,
               rows: currentTerminal.rows,
               initialCommand: initialCommandRef.current,
@@ -220,6 +226,7 @@ export function useShellConnection({
       isConnecting,
       isDarkModeRef,
       isPlainShellRef,
+      agentOverrideRef,
       selectedProjectRef,
       selectedSessionRef,
       terminalRef,
