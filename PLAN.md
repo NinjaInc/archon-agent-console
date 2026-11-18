@@ -102,3 +102,17 @@ by the `LLMProvider` union.
 
 - `cloudflared` missing; Cloudflare API credentials not available -> Access app + DNS are manual.
 - Passkey registration/login needs a physical authenticator tap through the tunnel hostname.
+
+## 5. Additions requested mid-run (2026-11-18)
+
+- **R1 - agy must work, and Claude must be able to hand work to it.** Besides the Antigravity
+  terminal tab (D2), ship `scripts/agy-pty` (author Josh Neufield, Archon Tech): runs
+  `agy -p "<prompt>"` inside a pseudo-terminal and prints the result to stdout, so Claude Code's
+  Bash tool can delegate ("ask agy to ...") despite agy printing nothing without a TTY.
+- **R2 - see local git repos, images and Google Drive in the console.** Replace the single
+  `WORKSPACES_ROOT` with `PROJECTS_ROOTS` (comma-separated; default `~/projects,~/src,~/drive`).
+  The file explorer, shell cwd and project creation are all confined to these roots with
+  realpath containment (Phase 4 tests cover traversal + symlinks per root). Repos under
+  `~/projects/NinjaInc/*` are discoverable as projects; `~/drive` (rclone mirror: Outputs/Images,
+  Documents, Media, Inbox, Backups) is browsable. Drive is a *mirror*: editing there only syncs
+  when `drive-sync push` runs - the console does not run it automatically.
