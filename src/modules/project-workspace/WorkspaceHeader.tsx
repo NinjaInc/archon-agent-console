@@ -18,6 +18,8 @@ type WorkspaceHeaderProps = {
   shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
   shouldShowProdTab: boolean;
+  shouldShowLocalTab?: boolean;
+  localStatus?: 'unknown' | 'online' | 'offline';
   isMobile: boolean;
   onMenuClick: () => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. */
@@ -33,6 +35,8 @@ export default function WorkspaceHeader({
   shouldShowTasksTab,
   shouldShowBrowserTab,
   shouldShowProdTab,
+  shouldShowLocalTab,
+  localStatus,
   isMobile,
   onMenuClick,
   onRenameSession,
@@ -131,6 +135,8 @@ export default function WorkspaceHeader({
                 setActiveTab={setActiveTab}
                 shouldShowBrowserTab={shouldShowBrowserTab}
                 shouldShowProdTab={shouldShowProdTab}
+                shouldShowLocalTab={shouldShowLocalTab}
+                localStatus={localStatus}
               />
             </div>
             {canScrollRight && (

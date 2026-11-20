@@ -68,6 +68,7 @@ import { getProdClaudeLaunch, prodClaudeRoutes } from './modules/prod-claude/ind
 import { githubReposRoutes } from './modules/github-repos/index.js';
 import { skillsImportRoutes } from './modules/skills-import/index.js';
 import { agyChatRoutes } from './modules/agy-chat/index.js';
+import { ollamaRoutes } from './modules/ollama/index.js';
 import { cfAccessGate, isCfAccessRequired, verifyCfAccessUpgrade } from './modules/cf-access/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
@@ -246,6 +247,9 @@ app.use('/api/skills-import', authenticateToken, skillsImportRoutes);
 
 // Antigravity chat: structured agy turns streamed as SSE (protected)
 app.use('/api/agy-chat', authenticateToken, agyChatRoutes);
+
+// Local (Ollama) model on the LAN: draft-only chat and task shortcuts, no tools (protected)
+app.use('/api/ollama', authenticateToken, ollamaRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);

@@ -42,6 +42,7 @@ Made by [Josh Neufield](https://archontech.au) at Archon Tech.
 | **Agy Chat** | A structured Antigravity chat: streamed replies, live progress, tool steps, saved history per project, model picker, Stop button. |
 | **Claude** | The Claude Code terminal in the project folder. |
 | **Antigravity** | The agy terminal (its own login flow works in the terminal). |
+| **Local LLM** *(optional)* | A small model on your own hardware via Ollama: draft-only chat and four task shortcuts. See below. |
 
 Tasks and the plugin tools (Claude Usage, Sessions, Scheduled Prompt and so on) live in the **More** menu at the end of the tab bar, so the sidebar stays free for your projects.
 
@@ -83,6 +84,25 @@ The console sends Web Push notifications, so your phone tells you when an agent 
 4. Pick which events you want: *action required*, *run stopped*, *errors*.
 
 Claude, Codex and OpenCode runs notify as before. **Agy Chat** notifies when a reply takes longer than 20 seconds (so quick answers stay quiet), or fails, and tapping the notification opens the Agy Chat tab. Stopping a turn yourself never notifies. The status-bar icon is a white version of the Archon mark (`public/badge-96.png`), as Android requires.
+
+### Local LLM (optional)
+
+A **Local LLM** tab sits next to the two chats when `OLLAMA_BASE_URL` is set. It talks to an [Ollama](https://ollama.com) server on your LAN, for example a gaming PC with a spare GPU, and is meant as a cheap drafting helper rather than an agent. The default model is `qwen3:8b`.
+
+- **No tools, draft only.** The model gets no filesystem or shell access. Everything it writes is shown as a *Draft* with a Copy button; nothing is saved, run or committed from this tab.
+- **Task shortcuts** (buttons, or type the slash command): `/summarise-logs` (paste logs after it), `/explain-diff`, `/commit-msg` (from the staged diff), `/boilerplate` (describe the file you want).
+- **Status at a glance.** A green or red dot on the tab and in the header, checked every 30 seconds. When the host is down you get *Local LLM offline* straight away instead of a hang, and an offer to use Claude Chat instead. Nothing switches on its own.
+- **Cold starts are expected.** The first reply after the model was unloaded waits up to `OLLAMA_TIMEOUT_MS` (default 120 s) while it loads into VRAM and shows a loading state; opening the tab warms the model up. Once tokens flow, a stalled reply is cut off after `OLLAMA_IDLE_TIMEOUT_MS` (30 s).
+- **Small context, on purpose.** Requests use an 8192-token window (`OLLAMA_NUM_CTX`, never above 16384) and the model is unloaded from VRAM five minutes after the last use, so the GPU is free for games. A diff or log that does not fit is **refused with its size** rather than silently cut.
+- **What never leaves this machine.** Before anything is sent, text is checked for secrets (private keys, API and cloud tokens, bearer tokens, passwords in URLs, `NAME=value` secrets) and refused if found. Diffs also drop lockfiles, `.env` files, key files and binaries, and say what was left out. Only the selected project's own `git diff` is read.
+- **Thinking** is off by default (faster). Switch it on for *Explain diff* when you want the model to reason first.
+
+```bash
+# in ~/.config/archon-agent-console/env (not in the repository)
+OLLAMA_BASE_URL=http://<ollama-host>:11434
+```
+
+The address must be on this machine or a private network; public hosts are refused. Ollama itself has no login, so keep it LAN-only: do not publish it through a tunnel or port forward.
 
 ### Prod Claude (optional)
 
@@ -174,6 +194,13 @@ Enable lingering (`loginctl enable-linger $USER`) to start it at boot. For a ded
 | `GITHUB_CLONE_ROOT` | Where *GitHub repos* clones to, as `<root>/<owner>/<name>` (default `~/projects`). |
 | `AGY_NOTIFY_MIN_SECONDS` | Agy Chat only sends a push notification for replies at least this long (default 20). Errors always notify. |
 | `VAPID_SUBJECT` | Who push services see as the sender. Defaults to `APP_ORIGIN` (https). |
+| `OLLAMA_BASE_URL` | Turns the **Local LLM** tab on. Address of an Ollama server on this machine or a private network, e.g. `http://<ollama-host>:11434`. Public hosts are refused. |
+| `OLLAMA_MODEL` | Default local model (default `qwen3:8b`). The picker lists whatever Ollama has installed. |
+| `OLLAMA_TIMEOUT_MS` | How long to wait for the first token, covering a cold model load (default `120000`). |
+| `OLLAMA_IDLE_TIMEOUT_MS` | How long a reply may go silent once tokens are flowing (default `30000`). |
+| `OLLAMA_NUM_CTX` | Context window per request (default `8192`, capped at `16384`; the UI never offers 32k). |
+| `OLLAMA_KEEP_ALIVE` | How long Ollama keeps the model in VRAM after the last use (default `5m`). |
+| `OLLAMA_API` | `native` (default, `/api/chat`, pins the context size) or `openai` (`/v1/chat/completions` SSE; Ollama ignores `num_ctx` there, so set it in the model's Modelfile). |
 | `AGY_CHAT_FULL_ACCESS` | `false` removes the Full access mode from Agy Chat. |
 | `DATABASE_PATH` | SQLite file holding passkeys, sessions, chats and app data (default `~/.cloudcli/auth.db`). |
 
@@ -213,6 +240,7 @@ Known limits: a symlink swapped between the path check and the write (TOCTOU) is
 npm run typecheck && npm run lint
 npm test               # server (node:test)
 npm run test:client    # client (vitest)
+npm run test:scripts   # helper scripts (node:test)
 npm run dev            # Vite + server with hot reload
 ```
 

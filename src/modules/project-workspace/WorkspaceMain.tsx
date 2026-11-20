@@ -9,6 +9,7 @@ import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { AgentLauncherPanel } from '@/modules/agent-launcher';
 import { AgyChatPanel } from '@/modules/agy-chat';
+import { OllamaPanel, useOllamaStatus } from '@/modules/ollama';
 import { ProdClaudePanel, useProdClaudeStatus } from '@/modules/prod-claude';
 import { GithubReposPanel } from '@/modules/github-repos';
 import { SkillsImportPanel } from '@/modules/skills-import';
@@ -81,6 +82,8 @@ function WorkspaceMain({
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
   const shouldShowProdTab = useProdClaudeStatus().configured;
+  const ollama = useOllamaStatus();
+  const shouldShowLocalTab = ollama.configured;
 
   const {
     editingFile,
@@ -183,6 +186,8 @@ function WorkspaceMain({
         shouldShowTasksTab={shouldShowTasksTab}
         shouldShowBrowserTab={shouldShowBrowserTab}
         shouldShowProdTab={shouldShowProdTab}
+        shouldShowLocalTab={shouldShowLocalTab}
+        localStatus={ollama.status}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
@@ -255,6 +260,12 @@ function WorkspaceMain({
           {activeTab === 'agy-chat' && (
             <div className="h-full overflow-hidden">
               <AgyChatPanel key={selectedProject.projectId} selectedProject={selectedProject} />
+            </div>
+          )}
+
+          {shouldShowLocalTab && activeTab === 'local' && (
+            <div className="h-full overflow-hidden">
+              <OllamaPanel key={selectedProject.projectId} selectedProject={selectedProject} ollama={ollama} onOpenClaudeChat={() => setActiveTab('chat')} />
             </div>
           )}
 

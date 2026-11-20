@@ -266,6 +266,15 @@ export const api = {
     send: (chatId: string, body: { text: string; model?: string; mode?: 'plan' | 'accept-edits' | 'auto' }, signal?: AbortSignal) =>
       authenticatedFetch(`/api/agy-chat/${encodeURIComponent(chatId)}/messages`, { method: 'POST', body: JSON.stringify(body), signal }),
   },
+  // Local (Ollama) model on the LAN. `chat` and `task` answer with a Server-Sent Events stream, so they return the raw Response.
+  ollama: {
+    status: (fresh = false) => get(`/api/ollama/status${fresh ? '?fresh=1' : ''}`),
+    warmup: (model?: string) => post('/api/ollama/warmup', { model }),
+    chat: (body: { messages: Array<{ role: 'user' | 'assistant'; content: string }>; model?: string; think?: boolean }, signal?: AbortSignal) =>
+      authenticatedFetch('/api/ollama/chat', { method: 'POST', body: JSON.stringify(body), signal }),
+    task: (name: string, body: { text?: string; projectId?: string; model?: string; think?: boolean }, signal?: AbortSignal) =>
+      authenticatedFetch(`/api/ollama/tasks/${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(body), signal }),
+  },
   // Whether the Prod Claude terminal (ssh to the production host's own Claude Code) is set up.
   prodClaude: {
     status: () => get('/api/prod-claude/status'),

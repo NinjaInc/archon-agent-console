@@ -1,4 +1,4 @@
-import { MessageSquare, MessageSquareText, Sparkles, Terminal, Folder, GitBranch, MonitorPlay, Server, type LucideIcon } from 'lucide-react';
+import { Cpu, MessageSquare, MessageSquareText, Sparkles, Terminal, Folder, GitBranch, MonitorPlay, Server, type LucideIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,10 @@ type WorkspaceTabsProps = {
   shouldShowBrowserTab: boolean;
   /** True once the Prod Claude terminal (ssh to the production host) is set up on the server. */
   shouldShowProdTab: boolean;
+  /** True once the Local (Ollama) model is set up on the server. */
+  shouldShowLocalTab?: boolean;
+  /** Colours the dot on the Local tab: green when the host answers, red when it does not. */
+  localStatus?: 'unknown' | 'online' | 'offline';
 };
 
 type BuiltInTab = {
@@ -32,6 +36,8 @@ const BASE_TABS: BuiltInTab[] = [
   { kind: 'builtin', id: 'git',   labelKey: 'tabs.git',   icon: GitBranch },
 ];
 
+const LOCAL_TAB: BuiltInTab = { kind: 'builtin', id: 'local', labelKey: 'tabs.local', icon: Cpu };
+
 const PROD_TAB: BuiltInTab = { kind: 'builtin', id: 'prod', labelKey: 'tabs.prod', icon: Server };
 
 const BROWSER_TAB: BuiltInTab = {
@@ -47,15 +53,25 @@ export default function WorkspaceTabs({
   setActiveTab,
   shouldShowBrowserTab,
   shouldShowProdTab,
+  shouldShowLocalTab = false,
+  localStatus = 'unknown',
 }: WorkspaceTabsProps) {
   const { t } = useTranslation();
 
   // Plugin tabs and Tasks live in the sidebar footer (SidebarFooter), not in this bar.
   // Prod Claude sits right after the two local terminals, so the three terminals stay together.
-  const withProd = shouldShowProdTab
-    ? [...BASE_TABS.slice(0, 4), PROD_TAB, ...BASE_TABS.slice(4)]
-    : BASE_TABS;
-  const tabs: BuiltInTab[] = [...withProd, ...(shouldShowBrowserTab ? [BROWSER_TAB] : [])];
+  // Order: the chats (Claude, Agy, then the Local model), the code terminals (+ Prod Claude), then the project views.
+  const [claudeChat, agyChat, claudeShell, agyShell, ...projectViews] = BASE_TABS;
+  const tabs: BuiltInTab[] = [
+    claudeChat,
+    agyChat,
+    ...(shouldShowLocalTab ? [LOCAL_TAB] : []),
+    claudeShell,
+    agyShell,
+    ...(shouldShowProdTab ? [PROD_TAB] : []),
+    ...projectViews,
+    ...(shouldShowBrowserTab ? [BROWSER_TAB] : []),
+  ];
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const tabList = event.currentTarget.closest('[role="tablist"]');
@@ -100,7 +116,16 @@ export default function WorkspaceTabs({
                 // Production is always red, so it cannot be mistaken for the local Claude tab.
                 className={`h-8 max-w-44 px-2.5 py-[5px] ${tab.id === 'prod' ? 'text-red-400 hover:text-red-300' : ''}`}
               >
+                <span className="relative inline-flex">
                   <tab.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
+                  {tab.id === 'local' && (
+                    <span
+                      role="img"
+                      aria-label={localStatus === 'online' ? 'Local LLM online' : localStatus === 'offline' ? 'Local LLM offline' : 'Local LLM status unknown'}
+                      className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${localStatus === 'online' ? 'bg-emerald-500' : localStatus === 'offline' ? 'bg-red-500' : 'bg-muted-foreground/50'}`}
+                    />
+                  )}
+                </span>
                 <span className={`${isActive ? 'inline max-w-28' : 'hidden'} truncate sm:max-w-36 lg:inline`}>
                   {displayLabel}
                 </span>
