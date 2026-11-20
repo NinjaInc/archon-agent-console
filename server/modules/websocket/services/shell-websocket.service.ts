@@ -124,6 +124,8 @@ type ShellWebSocketDependencies = {
   /** Returns the real path when `candidate` is inside an allowed projects root, otherwise null. */
   resolveAllowedProjectPath?: (candidate: string) => Promise<string | null>;
   getAgentEnvironment?: (provider: string) => Promise<Record<string, string>>;
+  /** The ssh launch for the Prod Claude terminal (a separate Claude Code on the production host), or null when not set up. */
+  getProdClaudeLaunch?: () => Promise<{ file: string; args: string[]; env: Record<string, string> } | null>;
 };
 
 /**
@@ -583,7 +585,7 @@ export function handleShellConnection(
             : '';
         // agy gets its own PTY slot: without this it would reattach to the
         // Claude shell that already owns `<project>_default`.
-        const agentSuffix = provider === 'agy' ? '_agy' : '';
+        const agentSuffix = provider === 'agy' ? '_agy' : provider === 'prod-claude' ? '_prod' : '';
         ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}${agentSuffix}`;
 
         if (isLoginCommand || forceRestart) {
@@ -661,9 +663,19 @@ export function handleShellConnection(
         );
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
-        const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-        const shellArgs =
-          os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+        // Prod Claude is an ssh session to another machine. It never runs through this server's shell, and it
+        // starts from an empty environment so none of this server's tokens or keys can reach the other side.
+        const prodLaunch = provider === 'prod-claude' && dependencies.getProdClaudeLaunch
+          ? await dependencies.getProdClaudeLaunch()
+          : null;
+        if (provider === 'prod-claude' && !prodLaunch) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Prod Claude is not set up on this server' }));
+          return;
+        }
+        const shell = prodLaunch ? prodLaunch.file : os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+        const shellArgs = prodLaunch
+          ? prodLaunch.args
+          : os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
@@ -678,7 +690,11 @@ export function handleShellConnection(
           cols: termCols,
           rows: termRows,
           cwd: resolvedProjectPath,
-          env: {
+          env: prodLaunch ? {
+            ...prodLaunch.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+          } : {
             ...process.env,
             ...agentEnvironment,
             [prioritizedPath.key]: prioritizedPath.value,
@@ -816,7 +832,9 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'agy'
                   ? 'Antigravity'
-                  : provider === 'opencode'
+                  : provider === 'prod-claude'
+                    ? 'PRODUCTION Claude'
+                    : provider === 'opencode'
                     ? 'OpenCode'
                     : 'Claude';
           welcomeMsg = hasSession && resumeSessionId

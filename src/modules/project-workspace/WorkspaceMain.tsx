@@ -7,6 +7,11 @@ import { GitPanel } from '@/modules/git-panel';
 import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
+import { AgentLauncherPanel } from '@/modules/agent-launcher';
+import { AgyChatPanel } from '@/modules/agy-chat';
+import { ProdClaudePanel, useProdClaudeStatus } from '@/modules/prod-claude';
+import { GithubReposPanel } from '@/modules/github-repos';
+import { SkillsImportPanel } from '@/modules/skills-import';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
@@ -17,6 +22,8 @@ import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 
 type WorkspaceMainProps = {
+  /** Every registered project; the agent launcher offers them as repositories. */
+  projects: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   activeTab: AppTab;
@@ -41,6 +48,7 @@ type WorkspaceMainProps = {
 
 /** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
 function WorkspaceMain({
+  projects,
   selectedProject,
   selectedSession,
   activeTab,
@@ -72,6 +80,7 @@ function WorkspaceMain({
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
+  const shouldShowProdTab = useProdClaudeStatus().configured;
 
   const {
     editingFile,
@@ -137,6 +146,29 @@ function WorkspaceMain({
     return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
 
+  // Skills import is a full page too; "this project only" uses the selected project when there is one.
+  if (activeTab === 'skills') {
+    return <SkillsImportPanel selectedProject={selectedProject} />;
+  }
+
+  // The agent launcher is a full page that works without a selected project too.
+  if (activeTab === 'launcher') {
+    return (
+      <AgentLauncherPanel
+        projects={projects}
+        selectedProject={selectedProject}
+        onProjectSelect={onProjectSelect}
+        onProjectsRefresh={onProjectsRefresh}
+        onOpenTab={setActiveTab}
+      />
+    );
+  }
+
+  // The GitHub view works without a selected project: it is how you pick or clone one.
+  if (activeTab === 'github') {
+    return <GithubReposPanel onProjectSelect={onProjectSelect} onProjectsRefresh={onProjectsRefresh} />;
+  }
+
   if (!selectedProject) {
     return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
@@ -150,6 +182,7 @@ function WorkspaceMain({
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
         shouldShowBrowserTab={shouldShowBrowserTab}
+        shouldShowProdTab={shouldShowProdTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
@@ -210,6 +243,18 @@ function WorkspaceMain({
                 showHeader={false}
                 isActive={activeTab === 'agy'}
               />
+            </div>
+          )}
+
+          {shouldShowProdTab && activeTab === 'prod' && (
+            <div className="h-full overflow-hidden">
+              <ProdClaudePanel project={selectedProject} isActive />
+            </div>
+          )}
+
+          {activeTab === 'agy-chat' && (
+            <div className="h-full overflow-hidden">
+              <AgyChatPanel key={selectedProject.projectId} selectedProject={selectedProject} />
             </div>
           )}
 

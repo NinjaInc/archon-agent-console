@@ -1,17 +1,17 @@
-import { MessageSquare, Sparkles, Terminal, Folder, GitBranch, ClipboardCheck, MonitorPlay, type LucideIcon } from 'lucide-react';
+import { MessageSquare, MessageSquareText, Sparkles, Terminal, Folder, GitBranch, MonitorPlay, Server, type LucideIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Tooltip, PillBar, Pill } from '@/shared/ui';
 import type { AppTab } from '@/shared/types';
-import { usePlugins,PluginIcon } from '@/modules/plugins';
 
 type WorkspaceTabsProps = {
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
-  shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
+  /** True once the Prod Claude terminal (ssh to the production host) is set up on the server. */
+  shouldShowProdTab: boolean;
 };
 
 type BuiltInTab = {
@@ -21,23 +21,18 @@ type BuiltInTab = {
   icon: LucideIcon;
 };
 
-type PluginTab = {
-  kind: 'plugin';
-  id: AppTab;
-  label: string;
-  pluginName: string;
-  iconFile: string;
-};
-
-type TabDefinition = BuiltInTab | PluginTab;
 
 const BASE_TABS: BuiltInTab[] = [
+  // The two chats first (Claude, then Antigravity), then the two code terminals, then the project views.
   { kind: 'builtin', id: 'chat',  labelKey: 'tabs.chat',  icon: MessageSquare },
+  { kind: 'builtin', id: 'agy-chat', labelKey: 'tabs.agyChat', icon: MessageSquareText },
   { kind: 'builtin', id: 'shell', labelKey: 'tabs.shell', icon: Terminal },
   { kind: 'builtin', id: 'agy',   labelKey: 'tabs.agy',   icon: Sparkles },
   { kind: 'builtin', id: 'files', labelKey: 'tabs.files', icon: Folder },
   { kind: 'builtin', id: 'git',   labelKey: 'tabs.git',   icon: GitBranch },
 ];
+
+const PROD_TAB: BuiltInTab = { kind: 'builtin', id: 'prod', labelKey: 'tabs.prod', icon: Server };
 
 const BROWSER_TAB: BuiltInTab = {
   kind: 'builtin',
@@ -46,40 +41,21 @@ const BROWSER_TAB: BuiltInTab = {
   icon: MonitorPlay,
 };
 
-const TASKS_TAB: BuiltInTab = {
-  kind: 'builtin',
-  id: 'tasks',
-  labelKey: 'tabs.tasks',
-  icon: ClipboardCheck,
-};
-
-/** Rendered by WorkspaceHeader to show the built-in workspace tabs plus any enabled plugin tabs. */
+/** Rendered by WorkspaceHeader to show the core workspace tabs; plugin tabs and Tasks are reached from the sidebar footer. */
 export default function WorkspaceTabs({
   activeTab,
   setActiveTab,
-  shouldShowTasksTab,
   shouldShowBrowserTab,
+  shouldShowProdTab,
 }: WorkspaceTabsProps) {
   const { t } = useTranslation();
-  const { plugins } = usePlugins();
 
-  const builtInTabs: BuiltInTab[] = [
-    ...BASE_TABS,
-    ...(shouldShowBrowserTab ? [BROWSER_TAB] : []),
-    ...(shouldShowTasksTab ? [TASKS_TAB] : []),
-  ];
-
-  const pluginTabs: PluginTab[] = plugins
-    .filter((p) => p.enabled)
-    .map((p) => ({
-      kind: 'plugin',
-      id: `plugin:${p.name}` as AppTab,
-      label: p.displayName,
-      pluginName: p.name,
-      iconFile: p.icon,
-    }));
-
-  const tabs: TabDefinition[] = [...builtInTabs, ...pluginTabs];
+  // Plugin tabs and Tasks live in the sidebar footer (SidebarFooter), not in this bar.
+  // Prod Claude sits right after the two local terminals, so the three terminals stay together.
+  const withProd = shouldShowProdTab
+    ? [...BASE_TABS.slice(0, 4), PROD_TAB, ...BASE_TABS.slice(4)]
+    : BASE_TABS;
+  const tabs: BuiltInTab[] = [...withProd, ...(shouldShowBrowserTab ? [BROWSER_TAB] : [])];
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const tabList = event.currentTarget.closest('[role="tablist"]');
@@ -108,13 +84,10 @@ export default function WorkspaceTabs({
     >
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeTab;
-        const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
+        const displayLabel = t(tab.labelKey);
 
         return (
           <Fragment key={`${tab.id}-${index}`}>
-            {index === builtInTabs.length && pluginTabs.length > 0 && (
-              <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
-            )}
             <Tooltip content={displayLabel} position="bottom">
               <Pill
                 role="tab"
@@ -124,17 +97,10 @@ export default function WorkspaceTabs({
                 isActive={isActive}
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={handleTabKeyDown}
-                className="h-8 max-w-44 px-2.5 py-[5px]"
+                // Production is always red, so it cannot be mistaken for the local Claude tab.
+                className={`h-8 max-w-44 px-2.5 py-[5px] ${tab.id === 'prod' ? 'text-red-400 hover:text-red-300' : ''}`}
               >
-                {tab.kind === 'builtin' ? (
                   <tab.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
-                ) : (
-                  <PluginIcon
-                    pluginName={tab.pluginName}
-                    iconFile={tab.iconFile}
-                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center [&>svg]:h-full [&>svg]:w-full"
-                  />
-                )}
                 <span className={`${isActive ? 'inline max-w-28' : 'hidden'} truncate sm:max-w-36 lg:inline`}>
                   {displayLabel}
                 </span>

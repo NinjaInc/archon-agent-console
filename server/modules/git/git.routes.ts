@@ -1185,9 +1185,19 @@ Generate the commit message:`;
 
     // Call the appropriate agent
     if (provider === 'claude') {
+      // The diff is already in the prompt, and it is untrusted text: nothing in it may make the agent
+      // run a command. So no tools at all, no permission bypass, and no repository or user settings
+      // (hooks, MCP servers) are loaded for this one-shot call.
       await queryClaudeSDK(prompt, {
         cwd: projectPath,
-        permissionMode: 'bypassPermissions',
+        permissionMode: 'default',
+        toolsSettings: {
+          allowedTools: [],
+          disallowedTools: ['Bash', 'BashOutput', 'KillShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'Skill', 'SlashCommand', 'mcp__*'],
+          skipPermissions: false,
+        },
+        settingSources: [],
+        noTools: true,
         model: 'sonnet',
         unattended: true, // No person is there to answer an MCP server's request for input
       }, writer);

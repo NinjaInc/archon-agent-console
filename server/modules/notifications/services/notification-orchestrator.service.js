@@ -14,6 +14,8 @@ const PROVIDER_LABELS = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
+  opencode: 'OpenCode',
+  agy: 'Antigravity',
   system: 'System'
 };
 
@@ -46,6 +48,9 @@ function isDuplicate(event) {
   return false;
 }
 
+/**
+ * @param {{ provider?: string, sessionId?: string | null, kind?: string, code?: string, meta?: Record<string, any>, severity?: string, dedupeKey?: string | null, requiresUserAction?: boolean }} input
+ */
 function createNotificationEvent({
   provider,
   sessionId = null,
@@ -166,13 +171,15 @@ function buildNotificationPayload(event) {
   const message = CODE_MAP[normalizedEvent.code] || 'You have a new notification';
 
   return {
-    title: sessionName || 'CloudCLI',
+    title: sessionName || 'Archon Agent Console',
     body: `${providerLabel}: ${message}`,
     data: {
       sessionId: normalizedEvent.sessionId || null,
       code: normalizedEvent.code,
       provider: normalizedEvent.provider || null,
       sessionName,
+      // Which workspace tab a tap should open (the service worker forwards it to the app).
+      tab: normalizedEvent.meta?.tab || null,
       tag: `${normalizedEvent.provider || 'assistant'}:${normalizedEvent.sessionId || 'none'}:${normalizedEvent.code}`
     }
   };
@@ -259,7 +266,10 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 }
 
-function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
+/**
+ * @param {{ userId: string | number | null, provider: string, sessionId?: string | null, stopReason?: string, sessionName?: string | null, extraMeta?: Record<string, unknown> }} input
+ */
+function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null, extraMeta = {} }) {
   notifyUserIfEnabled({
     userId,
     event: createNotificationEvent({
@@ -267,7 +277,7 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
       sessionId,
       kind: 'stop',
       code: 'run.stopped',
-      meta: { stopReason, sessionName },
+      meta: { ...extraMeta, stopReason, sessionName },
       severity: 'info',
       dedupeKey: `${provider}:run:stop:${sessionId || 'none'}:${stopReason}`
     })
@@ -296,7 +306,10 @@ function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, ses
   });
 }
 
-function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
+/**
+ * @param {{ userId: string | number | null, provider: string, sessionId?: string | null, error?: unknown, sessionName?: string | null, extraMeta?: Record<string, unknown> }} input
+ */
+function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null, extraMeta = {} }) {
   const errorMessage = normalizeErrorMessage(error);
 
   notifyUserIfEnabled({
@@ -306,7 +319,7 @@ function notifyRunFailed({ userId, provider, sessionId = null, error, sessionNam
       sessionId,
       kind: 'error',
       code: 'run.failed',
-      meta: { error: errorMessage, sessionName },
+      meta: { ...extraMeta, error: errorMessage, sessionName },
       severity: 'error',
       dedupeKey: `${provider}:run:error:${sessionId || 'none'}:${errorMessage}`
     })

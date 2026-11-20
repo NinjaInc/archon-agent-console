@@ -427,7 +427,8 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
   // Use the tools preset to make all default built-in tools available (including AskUserQuestion).
   // This was introduced in SDK 0.1.57. Omitting this preserves existing behavior (all tools available),
   // but being explicit ensures forward compatibility and clarity.
-  sdkOptions.tools = { type: 'preset', preset: 'claude_code' };
+  // `noTools` is for one-shot text jobs over untrusted input (commit messages): no built-in tool exists to call.
+  sdkOptions.tools = options.noTools === true ? [] : { type: 'preset', preset: 'claude_code' };
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
@@ -444,7 +445,8 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     preset: 'claude_code'
   };
 
-  sdkOptions.settingSources = ['project', 'user', 'local'];
+  // A caller that must not load repository or user settings (hooks, MCP servers) passes `settingSources`, e.g. [].
+  sdkOptions.settingSources = Array.isArray(options.settingSources) ? options.settingSources : ['project', 'user', 'local'];
 
   // The SDK resumes with the provider-native session id, never the app id.
   // `resumeFromScratch` is set when the very first prompt of a conversation was

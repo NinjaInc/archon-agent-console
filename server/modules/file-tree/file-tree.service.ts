@@ -42,6 +42,12 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 // broad workspace (for example, a user's home directory) cannot exhaust the
 // server heap before the browser has a chance to switch to a narrower project.
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
+/**
+ * A project opened at a whole allowed root (for example the home directory) is a place to browse
+ * from, not a code base: it shows this many levels, without hidden folders, and the user drills
+ * into a subfolder for more. Ordinary projects keep the full-depth tree.
+ */
+const BROAD_ROOT_TREE_DEPTH = 3;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
@@ -186,6 +192,28 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
   const { acquire, release } = createConcurrencyLimiter(concurrencyLimit);
 
   const workspaceRoots = dependencies.workspace.rootPaths ?? [dependencies.workspace.rootPath];
+  const deniedPaths = dependencies.workspace.deniedPaths ?? [];
+  /** True when the project is an allowed root itself rather than something inside one. */
+  async function isWholeWorkspaceRoot(projectRoot: string): Promise<boolean> {
+    try {
+      const realProject = await fileSystem.realpath(projectRoot);
+      for (const root of workspaceRoots) {
+        try {
+          if ((await fileSystem.realpath(root)) === realProject) {
+            return true;
+          }
+        } catch {
+          // A root that does not exist here cannot be the project.
+        }
+      }
+    } catch {
+      // The project path was already checked by resolveProjectRoot.
+    }
+    return false;
+  }
+
+  const isDenied = (candidate: string) =>
+    deniedPaths.some((entry) => candidate === entry || candidate.startsWith(`${entry}${path.sep}`));
 
   async function resolveProjectRoot(projectId: string): Promise<string> {
     const projectRoot = await dependencies.projects.getProjectPathById(projectId);
@@ -206,6 +234,9 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     try {
       realCandidate = await fileSystem.realpath(candidate);
     } catch {
+      return false;
+    }
+    if (isDenied(realCandidate)) {
       return false;
     }
     for (const root of workspaceRoots) {
@@ -251,6 +282,10 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         const realProbe = await fileSystem.realpath(probe);
         if (realProbe !== realProjectRoot && !realProbe.startsWith(`${realProjectRoot}${path.sep}`)) {
           throw outside();
+        }
+        // A project that contains a credentials folder (the home directory) must not expose it.
+        if (isDenied(realProbe)) {
+          throw createFileTreeError('Path is a protected credentials folder', 403, 'PATH_PROTECTED');
         }
         return lexicalPath;
       } catch (error) {
@@ -301,6 +336,10 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       for await (const entry of fileSystem.openDirectory(directoryPath)) {
         const isDirectory = entry.isDirectory();
         if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
+          continue;
+        }
+        // Credential folders are not even listed.
+        if (isDenied(path.join(directoryPath, entry.name))) {
           continue;
         }
 
@@ -451,7 +490,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         return readOnlyPath;
       }
 
-      const workspacePath = await resolvePathUnderRoots(targetPath, workspaceRoots);
+      const workspacePath = await resolvePathUnderRoots(targetPath, workspaceRoots, deniedPaths);
       if (workspacePath) {
         return workspacePath;
       }
@@ -614,6 +653,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
             dependencies.logger.error(`Error reading .gitignore in "${projectRoot}"`, error);
           }
         }
+      }
+
+      if (await isWholeWorkspaceRoot(projectRoot)) {
+        const baseFilter = includeEntry ?? includeEntryByFallbackDirectoryNames;
+        const withoutHiddenFolders: FileTreeEntryFilter = (entryPath, isDirectory) =>
+          baseFilter(entryPath, isDirectory) && !(isDirectory && path.basename(entryPath).startsWith('.'));
+        return buildFileTree(projectRoot, BROAD_ROOT_TREE_DEPTH, 0, withoutHiddenFolders);
       }
 
       return buildFileTree(projectRoot, 10, 0, includeEntry);

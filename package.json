@@ -3,7 +3,7 @@
   "version": "1.37.9",
   "productName": "CloudCLI",
   "desktopName": "ai.cloudcli.desktop.desktop",
-  "description": "A web-based UI for Claude Code CLI",
+  "description": "Private, passkey-secured web console for driving Claude Code and Google Antigravity against your project folders",
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
@@ -19,13 +19,13 @@
     "scripts/",
     "README.md"
   ],
-  "homepage": "https://cloudcli.ai",
+  "homepage": "https://github.com/NinjaInc/archon-agent-console",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
+    "url": "git+https://github.com/NinjaInc/archon-agent-console.git"
   },
   "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
+    "url": "https://github.com/NinjaInc/archon-agent-console/issues"
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
@@ -63,7 +63,8 @@
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
     "update:platform": "./update-platform.sh",
-    "passkey:reset": "tsx --tsconfig server/tsconfig.json server/modules/auth/passkey-reset.cli.ts"
+    "passkey:reset": "tsx --tsconfig server/tsconfig.json server/modules/auth/passkey-reset.cli.ts",
+    "test:scripts": "node --test scripts/tests/*.test.mjs"
   },
   "build": {
     "appId": "ai.cloudcli.desktop",
@@ -152,22 +153,18 @@
     }
   },
   "keywords": [
-    "claude code",
+    "archon",
     "claude-code",
-    "claude-code-ui",
-    "cloudcli",
-    "codex",
-    "cursor",
-    "cursor-cli",
-    "anthropic",
-    "openai",
-    "google",
+    "antigravity",
+    "agy",
     "coding-agent",
+    "passkeys",
+    "webauthn",
+    "cloudflare-tunnel",
     "web-ui",
-    "ui",
-    "mobile IDE"
+    "developer-tools"
   ],
-  "author": "CloudCLI UI Contributors",
+  "author": "Josh Neufield (Archon Tech); based on CloudCLI UI by its contributors",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.311",

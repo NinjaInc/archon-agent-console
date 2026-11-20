@@ -1,364 +1,237 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
- <h1>Cloud CLI (aka Claude Code UI)</h1>
- <p>A desktop and mobile UI for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, and <a href="https://developers.openai.com/codex">Codex</a>.<br>Use it locally or remotely to view your active projects and sessions from everywhere.</p>
+  <img src="docs/images/banner.webp" alt="Archon Agent Console by Archon Tech" width="640">
+  <p><strong>A private, passkey-secured web console for driving Claude Code and Google Antigravity against your project folders.</strong></p>
+  <p>
+    <img src="https://img.shields.io/badge/login-passkeys%20only-6c4bff" alt="Passkeys only">
+    <img src="https://img.shields.io/badge/agents-Claude%20Code%20%2B%20Antigravity-1fb6d6" alt="Claude Code and Antigravity">
+    <img src="https://img.shields.io/badge/node-%E2%89%A5%2022-339933" alt="Node 22 or newer">
+    <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="AGPL-3.0-or-later">
+  </p>
+  <p>
+    <a href="#what-it-does">What it does</a> ·
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#configuration">Configuration</a> ·
+    <a href="#going-live-with-cloudflare">Cloudflare</a> ·
+    <a href="#security-model">Security</a> ·
+    <a href="#credits-and-licence">Licence</a>
+  </p>
 </div>
 
-<p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Documentation</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="CONTRIBUTING.md">Contributing</a>
-</p>
+![Agy Chat](docs/images/agy-chat.webp)
 
-<p align="center">
- <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
- <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord"></a>
- <br><br>
- <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</p>
+## What it does
 
-<div align="right"><i><b>English</b> · <a href="./docs/README.ru.md">Русский</a> · <a href="./docs/README.de.md">Deutsch</a> · <a href="./docs/README.ko.md">한국어</a> · <a href="./docs/README.zh-CN.md">简体中文</a> · <a href="./docs/README.zh-TW.md">繁體中文</a> · <a href="./docs/README.ja.md">日本語</a> · <a href="./docs/README.tr.md">Türkçe</a> · <a href="./docs/README.id.md">Bahasa Indonesia</a></i></div>
+Archon Agent Console is one browser tab for the AI coding agents you run on a dev server. Open a project, chat with **Claude Code** or **Antigravity (`agy`)**, watch them read and edit files, browse the repo, and launch each task in its own git worktree. It is built to sit behind a Cloudflare tunnel and be safe to leave on the internet: nothing is reachable without a passkey, and the agents run as the service user, not as root.
 
----
+Made by [Josh Neufield](https://archontech.au) at Archon Tech.
 
-## Archon Agent Console (fork)
+### Sign-in and access
 
-> Private, passkey-secured dashboard for driving **Claude Code** and **Google Antigravity (`agy`)** against your project folders. A fork of CloudCLI UI by Josh Neufield (Archon Tech). Everything below is specific to this fork; the rest of this README is upstream's.
+- **Passkeys only.** No passwords and no email or SMS recovery. Register several passkeys and revoke any of them from *Settings → Security*.
+- **First-run setup token.** The server prints a one-time token (valid 15 minutes) on first start. Paste it in the browser and tap your authenticator.
+- **Server-side sessions.** A `__Host-` cookie (`HttpOnly; Secure; SameSite=Strict`), 30 minutes idle and 12 hours absolute by default. Ending a session also closes its open terminals and sockets.
+- **Cloudflare Access on top.** When enabled, the app verifies the Access JWT itself (signature, issuer, audience, expiry) before serving anything.
 
-**What differs from upstream**
+![First-run setup](docs/images/setup.webp)
 
-| Area | Archon behaviour |
+### Agents
+
+| Tab | What it is |
 | --- | --- |
-| Login | Passkeys (WebAuthn) only. No passwords, no email/SMS recovery. |
-| Session | `__Host-` cookie, `HttpOnly; Secure; SameSite=Strict`; server-side, revocable; 30 min idle / 12 h absolute. Open websockets/terminals are closed when a session ends. |
-| Network | Binds `127.0.0.1` only (refuses anything else). Reached through a Cloudflare tunnel; the app also verifies the Cloudflare Access JWT itself. |
-| Agents | Claude Code chat + terminal, and an **Antigravity** tab running `agy` in the project folder (PTY). Gemini CLI is gone (upstream removed it). |
-| Files | Explorer, terminals and new projects are confined to `PROJECTS_ROOTS`, symlinks resolved. |
+| **Claude Chat** *(default)* | Claude Code chat with history, tool approvals and file references. |
+| **Agy Chat** | A structured Antigravity chat: streamed replies, live progress, tool steps, saved history per project, model picker, Stop button. |
+| **Claude** | The Claude Code terminal in the project folder. |
+| **Antigravity** | The agy terminal (its own login flow works in the terminal). |
 
-### Install
+Tasks and the plugin tools (Claude Usage, Sessions, Scheduled Prompt and so on) live in the **More** menu at the end of the tab bar, so the sidebar stays free for your projects.
+
+![The More menu](docs/images/more.webp)
+
+**Agy Chat has three permission modes**, chosen per message:
+
+| Mode | What agy can do |
+| --- | --- |
+| **Plan only** | Researches and writes a plan. Changes nothing in the project. |
+| **Edit files (no shell)** *(default)* | Reads and edits files with its built-in tools. Shell commands are refused. |
+| **Full access** | Edits files and runs any command as the server user. Must be picked on purpose and can be switched off with `AGY_CHAT_FULL_ACCESS=false`. |
+
+This matters: `agy -p` with no `--mode` runs commands and writes files anywhere without asking, so the console always passes an explicit mode. In the default mode agy is told up front to use its file tools, which is enough to explore and answer questions about a project. *Allowed commands* lets you permit specific exact command lines (agy matches the whole line, no wildcards) by editing `permissions.allow` in agy's `settings.json` for you.
+
+### Projects, repos and worktrees
+
+- **GitHub repos.** Lists your GitHub repositories (through the server's own `gh` login, so no token ever reaches the browser), shows which are on the server, and opens or clones them as projects. Only repositories in your own account can be cloned.
+- **Launch agent in a worktree.** Pick a repo, an agent and a task name. The console creates a git worktree on `agent/<agent>/<task>` and opens it in Claude chat, Claude terminal, Antigravity chat or Antigravity terminal, so two agents never edit the same files.
+- **Files and Source Control.** Explorer with editor, upload, rename and delete, plus staging, commits and worktree management. Credential folders (`~/.ssh`, `~/.config`, `~/.claude` and friends) are never listed or readable, even when your home directory is a project root.
+- **Browser preview.** The Browser tab can open a site or a running dev server from the server's own browser and shows detected local servers to pick from.
+
+![GitHub repositories](docs/images/github.webp)
+![Launch an agent in a worktree](docs/images/launcher.webp)
+
+### Skills
+
+*Skills* imports a `SKILL.md` (paste, file, folder or zip) for Claude Code, Antigravity, or both, for all projects or one. It validates the frontmatter, refuses symlinks and path tricks, never overwrites unless you ask, and shows what a skill contains first. Skills that grant tools or run commands need an explicit acknowledgement, because a skill is a set of instructions an agent will follow.
+
+![Skills import](docs/images/skills.webp)
+
+### Phone notifications (Android Chrome)
+
+The console sends Web Push notifications, so your phone tells you when an agent finishes, needs a tool approved, or fails, even with the tab closed. It needs the https address (the Cloudflare hostname).
+
+1. On Android, open the console in Chrome and sign in with your passkey.
+2. Chrome menu → **Install app** (or *Add to Home screen*). Installed, it behaves like a native app and notifications are most reliable.
+3. Open the installed app → **Settings → Notifications → Notify this browser** and tap *Allow* when Android asks.
+4. Pick which events you want: *action required*, *run stopped*, *errors*.
+
+Claude, Codex and OpenCode runs notify as before. **Agy Chat** notifies when a reply takes longer than 20 seconds (so quick answers stay quiet), or fails, and tapping the notification opens the Agy Chat tab. Stopping a turn yourself never notifies. The status-bar icon is a white version of the Archon mark (`public/badge-96.png`), as Android requires.
+
+### Prod Claude (optional)
+
+If a second machine (for example your production Docker host) runs its own Claude Code, the **Prod Claude** tab opens a terminal to it from the console. It is deliberately kept apart from this server's agents:
+
+- It is an ssh session to the other machine, so it has its own files, history and permissions. This server's Google Drive, repos and agents are not visible to it, and it cannot see them.
+- The session starts from an **empty environment**: none of this server's tokens or API keys are passed on. No ssh agent, no forwarding, no config files, and the host's SSH key is pinned.
+- It has its own terminal slot and a red "PRODUCTION" banner, so it cannot be mistaken for the local Claude tab.
+- Agents on this server cannot type into it. The terminal is only reachable through your signed-in browser session.
+
+Set it up once:
+
+```bash
+scripts/setup-prod-claude.sh <ssh-user> <host> /full/path/to/claude
+```
+
+It creates a key used only for this tab, pins the host's SSH key (compare the printed fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on that host), and prints one line for the other host's `~/.ssh/authorized_keys`. That line starts with `restrict,pty,command="..."`, so the key can only launch Claude Code there, never a shell, a file copy or a port forward. The tab appears once the config exists.
+
+The key file lives on this server as the service user, so a compromised agent here could still read it. The red banner and the restricted key limit what it could do with it; treat the production Claude's own permission prompts as the last line of defence.
+
+### Creative tools (optional)
+
+`scripts/install-craft-mcp.sh` adds [ArtCraft's Crafting Apps](https://getartcraft.com/apps) as MCP servers for Claude Code, so Claude can edit **PSD, DOCX, XLSX, PDF, SVG, video and CAD files** on the server: PhotoCraft (Photoshop-style), WordCraft, DeckCraft, GridCraft, VectorCraft, PdfCraft, LightCraft, FilmCraft, DesignCraft, EffectCraft, CADCraft and SoundCraft. They are the vendor's own signed headless CLIs, not a third-party gateway. For each app the script verifies the signing key's pinned fingerprint, the SHA-256, both PGP signatures and the archive paths, then does a real MCP handshake before registering it (`claude mcp add --scope user`). Everything installs under `~/.local/opt/artcraft`, with no root.
+
+```bash
+scripts/install-craft-mcp.sh            # install the default set
+scripts/install-craft-mcp.sh photo pdf  # or just some
+scripts/install-craft-mcp.sh --list     # what is installed and registered
+scripts/install-craft-mcp.sh --remove word
+```
+
+An MCP server runs as the service user, and Claude asks before using each tool unless you allow it.
+
+### Look and feel
+
+Archon Tech branding throughout: dark theme with the Archon palette, banner and app icon, installable as a PWA.
+
+![Files](docs/images/files.webp)
+
+## Quick start
+
+Requires **Node 22 or newer** (developed on 26) and the CLIs you want to drive (`claude`, `agy`, and `gh` for the GitHub view).
 
 ```bash
 git clone https://github.com/NinjaInc/archon-agent-console && cd archon-agent-console
-npm ci && npm run build          # needs Node >= 22 (tested on 26)
-cp .env.example .env             # then edit APP_ORIGIN, RP_ID, PROJECTS_ROOTS ...
-npm run server                   # http://127.0.0.1:3001
+npm ci && npm run build
+cp .env.example .env        # set APP_ORIGIN, RP_ID, PROJECTS_ROOTS
+npm run server              # http://127.0.0.1:3001
 ```
 
-On first start (no passkey yet) the console prints a **one-time setup token** (valid 15 minutes). Open `APP_ORIGIN`, paste the token and tap your authenticator. Further passkeys are added from **Settings > Security** while signed in.
+On first start the console prints a **one-time setup token**. Open `APP_ORIGIN`, paste the token, name your passkey and tap your authenticator. Add more passkeys later in *Settings → Security*.
+
+> **Testing locally?** Use `APP_ORIGIN=http://localhost:3001 RP_ID=localhost`. Passkeys need https or `localhost`, so a plain-http LAN address cannot sign in.
 
 > npm 12 skips install scripts by default. `package.json` allow-lists only the native modules the server needs (`bcrypt`, `better-sqlite3`, `node-pty`, `esbuild`, `sharp`).
 
-For a hardened always-on install (dedicated `archon` user, systemd, logrotate): review and run `sudo deploy/install.sh`.
+### Run it as a service
 
-### Environment variables
+Run it as a systemd service so it survives reboots. A user service works well on a single-user box:
+
+```ini
+# ~/.config/systemd/user/archon-agent-console.service
+[Service]
+WorkingDirectory=%h/src/archon-agent-console
+EnvironmentFile=%h/.config/archon-agent-console/env
+# claude, agy and gh must be on PATH (a service starts with a minimal one)
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node dist-server/server/index.js
+Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+```
+
+Enable lingering (`loginctl enable-linger $USER`) to start it at boot. For a dedicated, sandboxed `archon` user with logrotate, review and run `sudo deploy/install.sh`; `deploy/systemd/` has hardened unit examples. Read the first-run token from the service log, which is kept owner-only.
+
+## Configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `HOST` / `SERVER_PORT` | Must be loopback (default `127.0.0.1`) / `3001`. |
-| `APP_ORIGIN`, `RP_ID`, `RP_NAME` | WebAuthn origin (https, real hostname) and relying-party id. Test through the tunnel hostname, not localhost. |
+| `HOST`, `SERVER_PORT` | Bind address and port. Loopback only by default; anything else makes the server exit. |
+| `ALLOW_LAN_BIND` | `true` lets `HOST` be one private LAN IPv4 of this machine (for example when `cloudflared` runs on another host). `0.0.0.0`, `::`, hostnames and public addresses are always refused. |
+| `APP_ORIGIN`, `RP_ID`, `RP_NAME` | The exact https origin and WebAuthn relying-party id (usually the hostname). |
 | `SESSION_IDLE_MINUTES`, `SESSION_MAX_HOURS` | Idle (30) and absolute (12 h) session limits. |
-| `BOOTSTRAP_TOKEN` | Optional fixed first-run token (24+ chars). Otherwise a random one is printed. |
-| `CF_ACCESS_REQUIRED`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | Enforce Cloudflare Access JWT verification (signature, `iss`, `aud`, `exp`). Startup fails if required but unconfigured. |
-| `PROJECTS_ROOTS` | Comma-separated folders the explorer/terminals may use. Default: `~/projects,~/src,~/drive` that exist. |
-| `DATABASE_PATH` | SQLite file holding passkeys, sessions and app data. |
+| `BOOTSTRAP_TOKEN` | Optional fixed first-run token (24+ characters). Otherwise a random readable one is printed. |
+| `TRUST_PROXY` | Which proxy hops to trust for client IPs (default `loopback`). Set it when `cloudflared` connects from another host so the rate limiter sees real clients. |
+| `CF_ACCESS_REQUIRED`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | Enforce Cloudflare Access JWT verification. The server refuses to start if required but unconfigured. |
+| `PROJECTS_ROOTS` | Comma-separated folders the explorer, terminals and new projects may use (symlinks resolved). Default: `~/projects,~/src,~/drive` that exist. |
+| `PROJECTS_DENY` | Replaces the built-in list of credential folders that stay off-limits even inside a root. |
+| `GITHUB_CLONE_ROOT` | Where *GitHub repos* clones to, as `<root>/<owner>/<name>` (default `~/projects`). |
+| `AGY_NOTIFY_MIN_SECONDS` | Agy Chat only sends a push notification for replies at least this long (default 20). Errors always notify. |
+| `VAPID_SUBJECT` | Who push services see as the sender. Defaults to `APP_ORIGIN` (https). |
+| `AGY_CHAT_FULL_ACCESS` | `false` removes the Full access mode from Agy Chat. |
+| `DATABASE_PATH` | SQLite file holding passkeys, sessions, chats and app data (default `~/.cloudcli/auth.db`). |
 
-### Cloudflare setup
+## Going live with Cloudflare
 
-1. **Tunnel** (install `cloudflared` yourself; this repo never installs system packages):
-   `cloudflared tunnel login && cloudflared tunnel create archon-console && cloudflared tunnel route dns archon-console <HOSTNAME>`
-2. Copy `deploy/cloudflared/archon.yml.example` to `/etc/cloudflared/archon.yml`, fill in the tunnel UUID and `<HOSTNAME>`; credentials file mode `0600`.
-3. Install `deploy/systemd/cloudflared-archon.service` and `systemctl enable --now cloudflared-archon`. Websockets (`/ws`, `/shell`) work through the tunnel unchanged.
-4. **Access application + policy**: dashboard: *Zero Trust > Access > Applications > Add > Self-hosted*, domain `<HOSTNAME>`, policy *Allow* with your single email, session 8 h. Or run `deploy/cloudflare/access.sh.example` / `access.tf.example` after reading them (API token scope: *Access: Apps and Policies Edit*).
-5. Put the app's **AUD tag** and team domain in the env file and set `CF_ACCESS_REQUIRED=true`.
+1. **Tunnel.** Install `cloudflared` yourself (this repo never installs system packages), then `cloudflared tunnel login && cloudflared tunnel create archon-console && cloudflared tunnel route dns archon-console <HOSTNAME>`.
+2. **Route.** Copy `deploy/cloudflared/archon.yml.example` to `/etc/cloudflared/archon.yml` and point the ingress at `http://127.0.0.1:3001` (the credentials file stays `0600`). Install `deploy/systemd/cloudflared-archon.service`. Websockets work unchanged.
+3. **Access.** In *Zero Trust → Access → Applications* add a self-hosted app for `<HOSTNAME>` with an *Allow* policy for your email and an 8 h session. Or read and run `deploy/cloudflare/access.sh.example` / `access.tf.example`.
+4. **Enforce it.** Put the app's AUD tag and your team domain in the env file and set `CF_ACCESS_REQUIRED=true`.
 
-Two independent doors: Cloudflare Access (who may reach the origin) and the passkey (who may use the console). Both must pass.
+Two independent doors: Cloudflare Access decides who may reach the origin, and the passkey decides who may use the console. Both must pass.
 
-### Recovery
+## Recovery
 
-Lost every passkey? On the server (no remote or email path exists by design):
+Lost every passkey? There is deliberately no remote or email path. On the server:
 
 ```bash
-npm run passkey:reset    # wipes all passkeys + sessions, prints a new 15-minute setup token
+npm run passkey:reset   # wipes all passkeys and sessions, prints a new 15-minute setup token
 ```
 
-### Antigravity (`agy`)
+## Security model
 
-Open the **Antigravity** tab. Auth is either `agy`'s own OAuth URL flow (the URL appears in the terminal) or a Gemini API key: `PUT /api/agy/api-key {"apiKey":"..."}` stores it in an owner-only file, sets `{"modelProvider":"gemini"}` in `~/.gemini/antigravity-cli/settings.json`, and injects it only into agy terminals. `agy -p` prints nothing without a TTY, so from scripts or Claude use `scripts/agy-pty.mjs "<prompt>"`, which runs agy in a pseudo-terminal and prints clean text.
+The console is built around one owner and one trusted machine.
 
-### Keeping agents apart
+- **No session, no access.** Every API route, terminal and websocket needs a valid passkey session. Cross-origin requests and websockets are rejected, CORS is closed to other origins, and auth endpoints are rate-limited.
+- **Loopback by default.** A LAN address is an explicit opt-in for one private IP.
+- **Confined files.** Paths are resolved with `realpath` before any check, against `PROJECTS_ROOTS`, with a deny-list for credential folders. Skill imports refuse symlinked targets.
+- **Agents are not a sandbox.** Claude Code and agy run as the service user and can do anything that user can. Isolation is the OS account, the permission modes above, and (with `deploy/install.sh`) systemd sandboxing, not a container. Agy Chat defaults to a mode that cannot run commands, but its terminal and the Claude tabs are as capable as a shell.
+- **Trust what you open.** Claude Code loads a project's own settings (hooks, MCP servers, skills) when you chat in it. Only open and clone repositories you trust, and review imported skills.
+- **Secrets stay server-side.** The `gh` login, agy API key and Cloudflare values never reach the browser. One-time setup tokens are printed only to the owner-only server log.
 
-`scripts/agent-worktree.sh create <repo> <agent>` gives each agent its own git worktree and branch so Claude and agy never edit the same tree.
+Known limits: a symlink swapped between the path check and the write (TOCTOU) is not defended against, only a local attacker could win it; and a plain-http LAN address can load the page but cannot sign in.
+
+## Development
+
+```bash
+npm run typecheck && npm run lint
+npm test               # server (node:test)
+npm run test:client    # client (vitest)
+npm run dev            # Vite + server with hot reload
+```
+
+Server code lives in `server/modules/<feature>/` (service, routes, module wiring, tests) and the client in `src/modules/<feature>/`; both have module standards under `.agents/skills/`.
 
 ### Rebasing on upstream
 
 ```bash
-git remote -v                       # origin = your fork, upstream = siteboon/claudecodeui
+git remote -v                      # origin = this fork, upstream = siteboon/claudecodeui
 git fetch upstream && git rebase upstream/main
 npm ci && npm run build && npm test && npm run test:client
 ```
-Expect conflicts in `server/modules/auth/*`, `server/index.ts`, `src/modules/auth/*`, `src/shared/api.ts` and `src/index.css` (theme tokens). `package-lock.json` should be regenerated if upstream's contains non-npmjs `resolved` URLs.
 
-### Security notes and limits
+Expect conflicts in `server/modules/auth/*`, `server/index.ts`, `src/modules/auth/*`, `src/shared/api.ts`, `src/modules/sidebar/*` and `src/index.css` (theme tokens). Regenerate `package-lock.json` if upstream's contains non-npmjs `resolved` URLs.
 
-- Agents run as the service user and can do anything that user can. Isolation is the OS account, `PROJECTS_ROOTS`, and (with `deploy/install.sh`) systemd sandboxing, not a container.
-- A symlink swapped between the path check and the write (TOCTOU) is not defended against; only a local attacker could win it.
-- The first-run token is printed to the server log (owner-only, rotated). It is single-use and expires in 15 minutes.
+## Credits and licence
 
----
+Archon Agent Console is a fork of **[CloudCLI UI](https://github.com/siteboon/claudecodeui)** by siteboon, which provides the chat, terminal, file and git foundations. This fork replaces its login and network model, adds Antigravity, GitHub, worktree and skills features, and re-brands the interface. Thanks to the upstream authors.
 
-## Screenshots
+Licensed under the **GNU Affero General Public License v3.0 or later**. See [LICENSE](LICENSE). If you modify this software and run it as a network service, you must make your modified source available to its users.
 
-<div align="center">
-
-<table>
-<tr>
-<td align="center">
-<h3>Desktop View</h3>
-<img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
-<br>
-<em>Main interface showing project overview and chat</em>
-</td>
-<td align="center">
-<h3>Mobile Experience</h3>
-<img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
-<br>
-<em>Responsive mobile design with touch navigation</em>
-</td>
-</tr>
-<tr>
-<td align="center" colspan="2">
-<h3>CLI Selection</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
-<br>
-<em>Select between Claude Code, Cursor CLI and Codex</em>
-</td>
-</tr>
-</table>
-
-
-
-</div>
-
-## Features
-
-- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Agents from mobile 
-- **Interactive Chat Interface** - Built-in chat interface for seamless communication with the Agents
-- **Integrated Shell Terminal** - Direct access to the Agents CLI through built-in shell functionality
-- **File Explorer** - Interactive file tree with syntax highlighting and live editing
-- **Git Explorer** - View, stage and commit your changes. You can also switch branches 
-- **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks
-- **Session Management** - Resume conversations, manage multiple sessions, and track history
-- **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
-- **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
-- **Model Compatibility** - Works with Claude and GPT model families (the full list of supported models is available at runtime via `GET /api/providers/:provider/models`)
-
-
-## Quick Start
-
-### CloudCLI Cloud (Recommended)
-
-The fastest way to get started — no local setup required. Get a fully managed, containerized development environment accessible from the web, mobile app, API, or your favorite IDE.
-
-**[Get started with CloudCLI Cloud](https://cloudcli.ai)**
-
-### Self-Hosted (Open source)
-
-#### npm
-
-Try CloudCLI UI instantly with **npx** (requires **Node.js** v22+):
-
-```
-npx @cloudcli-ai/cloudcli
-```
-
-Or install **globally** for regular use:
-
-```
-npm install -g @cloudcli-ai/cloudcli
-cloudcli
-```
-
-Open `http://localhost:3001` — all your existing sessions are discovered automatically.
-
-Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
-
-#### Docker Sandboxes (Experimental)
-
-Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude Code by default. Requires the [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
-
-```
-npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
-```
-
-Supports Claude Code and Codex. See the [sandbox docs](docker/) for setup and advanced options.
-
-### Desktop Companion App
-
-CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local CloudCLI. It ships from this repository's GitHub Releases and keeps CloudCLI available from your menu bar or tray.
-
-- **[macOS](https://cloudcli.ai/download/macos)**
-- **[Windows](https://cloudcli.ai/download/windows)**
-- **Linux** — `.deb` (Debian/Ubuntu) from [GitHub Releases](https://github.com/siteboon/claudecodeui/releases)
-- **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
-
-Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
-
-
----
-
-## Which option is right for you?
-
-CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self-host it on your own machine, run it in a Docker sandbox for isolation, or use CloudCLI Cloud for a fully managed environment.
-
-| | Self-Hosted (npm) | Self-Hosted (Docker Sandbox) *(Experimental)* | CloudCLI Cloud |
-|---|---|---|---|
-| **Best for** | Local agent sessions on your own machine | Isolated agents with web/mobile IDE | Teams who want agents in the cloud |
-| **How you access it** | Browser via `[yourip]:port` | Browser via `localhost:port` | Browser, any IDE, REST API, n8n |
-| **Setup** | `npx @cloudcli-ai/cloudcli` | `npx @cloudcli-ai/cloudcli@latest sandbox ~/project` | No setup required |
-| **Isolation** | Runs on your host | Hypervisor-level sandbox (microVM) | Full cloud isolation |
-| **Machine needs to stay on** | Yes | Yes | No |
-| **Mobile access** | Any browser on your network | Any browser on your network | Any device |
-| **Desktop companion** | Optional. Choose Local CloudCLI | Optional. Choose Local CloudCLI | Optional. Opens cloud environments |
-| **Agents supported** | Claude Code, Cursor CLI, Codex | Claude Code, Codex | Claude Code, Cursor CLI, Codex |
-| **File explorer and Git** | Yes | Yes | Yes |
-| **MCP configuration** | Synced with `~/.claude` | Managed via UI | Managed via UI |
-| **REST API** | Yes | Yes | Yes |
-| **Team sharing** | No | No | Yes |
-| **Platform cost** | Free, open source | Free, open source | Starts at €7/month |
-
-> All options use your own AI subscriptions (Claude, Cursor, etc.) — CloudCLI provides the environment, not the AI.
-
----
-
-## Security & Tools Configuration
-
-**🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
-
-### Enabling Tools
-
-To use Claude Code's full functionality, you'll need to manually enable tools:
-
-1. **Open Tools Settings** - Click the gear icon in the sidebar
-2. **Enable Selectively** - Turn on only the tools you need
-3. **Apply Settings** - Your preferences are saved locally
-
-<div align="center">
-
-![Tools Settings Modal](public/screenshots/tools-modal.png)
-*Tools Settings interface - enable only what you need*
-
-</div>
-
-**Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
-
----
-
-## Plugins
-
-CloudCLI has a plugin system that lets you add custom tabs with their own frontend UI and optional Node.js backend. Install plugins from git repos directly in **Settings > Plugins**, or build your own.
-
-### Available Plugins
-
-| Plugin | Description |
-|---|---|
-| **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Shows file counts, lines of code, file-type breakdown, largest files, and recently modified files for your current project |
-| **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Full xterm.js terminal with multi-tab support |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Create workspace-scoped scheduled prompts and execute them through a local CLI such as Codex or Claude Code |
-| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Session intelligence for Claude Code inside CloudCLI, including token burn visibility |
-| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | View, manage, and kill active Claude Code sessions |
-| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Calculate API costs from model prices and token usage, with preset model pricing support |
-| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Task queue dashboard to view, filter, and launch agent tasks |
-| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install |
-| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Shows Claude and Codex usage and hands the open session to the other agent with its conversation history (macOS, needs ccx) |
-
-### Build Your Own
-
-**[Plugin Starter Template →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** — fork this repo to create your own plugin. It includes a working example with frontend rendering, live context updates, and RPC communication to a backend server.
-
-**[Plugin Documentation →](https://cloudcli.ai/docs/plugin-overview)** — full guide to the plugin API, manifest format, security model, and more.
-
-### Private Repositories
-
-The server installs and updates plugins with `git clone` and `git pull`, using the git credentials of the operating-system user it runs as (for a systemd service, the unit's `User=`). The server cannot answer a password or passphrase prompt during an install, so set up credentials for that user before installing from a private repository:
-
-- **`https://` URLs:** configure a git credential helper, for example `gh auth login` followed by `gh auth setup-git`, or a token in `~/.git-credentials` with `git config --global credential.helper store`.
-- **`git@` URLs:** give that user an SSH key the git host accepts and that works without a prompt: either it has no passphrase, or it is loaded into an `ssh-agent` whose `SSH_AUTH_SOCK` the server process inherits. Also add the host to that user's `~/.ssh/known_hosts`, for example by running `ssh -T git@github.com` once as that user.
-
-Without credentials, an `https://` install fails with a message saying that the repository is private or does not exist. Most git hosts, GitHub included, answer the same way for both. If the host rejects the credentials (wrong, expired or revoked), or ssh cannot log in for a `git@` URL, the message says so.
-
----
-## FAQ
-
-<details>
-<summary>How is this different from Claude Code Remote Control?</summary>
-
-Claude Code Remote Control lets you send messages to a session already running in your local terminal. Your machine has to stay on, your terminal has to stay open, and sessions time out after roughly 10 minutes without a network connection.
-
-CloudCLI UI and CloudCLI Cloud extend Claude Code rather than sit alongside it — your MCP servers, permissions, settings, and sessions are the exact same ones Claude Code uses natively. Nothing is duplicated or managed separately.
-
-Here's what that means in practice:
-
-- **All your sessions, not just one** — CloudCLI UI auto-discovers every session from your `~/.claude` folder. Remote Control only exposes the single active session to make it available in the Claude mobile app.
-- **Your settings are your settings** — MCP servers, tool permissions, and project config you change in CloudCLI UI are written directly to your Claude Code config and take effect immediately, and vice versa.
-- **Works with more agents** — Claude Code, Cursor CLI and Codex, not just Claude Code.
-- **Full UI, not just a chat window** — file explorer, Git integration, MCP management, and a shell terminal are all built in.
-- **CloudCLI Cloud runs in the cloud** — close your laptop, the agent keeps running. No terminal to babysit, no machine to keep awake.
-
-</details>
-
-<details>
-<summary>Do I need to pay for an AI subscription separately?</summary>
-
-Yes. CloudCLI provides the environment, not the AI. You bring your own Claude, Cursor, or Codex subscription. CloudCLI Cloud starts at €7/month for the hosted environment on top of that.
-
-</details>
-
-<details>
-<summary>Can I use CloudCLI UI on my phone?</summary>
-
-Yes. For self-hosted, run the server on your machine and open `[yourip]:port` in any browser on your network. For CloudCLI Cloud, open it from any device — no VPN, no port forwarding, no setup. A native app is also in the works.
-
-</details>
-
-<details>
-<summary>Will changes I make in the UI affect my local Claude Code setup?</summary>
-
-Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` config that Claude Code uses natively. MCP servers you add via the UI show up in Claude Code immediately and vice versa.
-
-</details>
-
----
-
-## Community & Support
-
-- **[Documentation](https://cloudcli.ai/docs)** — installation, configuration, features, and troubleshooting
-- **[Discord](https://discord.gg/buxwujPNRE)** — get help and connect with other users
-- **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — bug reports and feature requests
-- **[Contributing Guide](CONTRIBUTING.md)** — how to contribute to the project
-
-## License
-
-GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](LICENSE) for the full text, including additional terms under Section 7.
-
-This project is open source and free to use, modify, and distribute under the AGPL-3.0-or-later license. If you modify this software and run it as a network service, you must make your modified source code available to users of that service.
-
-CloudCLI UI - (https://cloudcli.ai).
-
-## Acknowledgments
-
-### Built With
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic's official CLI
-- **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor's official CLI
-- **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
-- **[React](https://react.dev/)** - User interface library
-- **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
-- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
-- **[CodeMirror](https://codemirror.net/)** - Advanced code editor
-- **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(Optional)* - AI-powered project management and task planning
-
-
-### Sponsors
-- [Siteboon - AI powered website builder](https://siteboon.ai)
----
-
-<div align="center">
- <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
-</div>
+Built on [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Antigravity](https://antigravity.google), [React](https://react.dev), [Vite](https://vitejs.dev), [Tailwind CSS](https://tailwindcss.com), [CodeMirror](https://codemirror.net), [SimpleWebAuthn](https://simplewebauthn.dev) and [node-pty](https://github.com/microsoft/node-pty).

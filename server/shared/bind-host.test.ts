@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { evaluateBindHost, isPrivateIPv4 } from './bind-host.js';
 
-const local = () => ['127.0.0.1', '192.168.1.84'];
+const local = () => ['127.0.0.1', '10.0.0.5'];
 
 test('loopback is always allowed', () => {
   for (const h of ['127.0.0.1', '::1', 'localhost']) assert.deepEqual(evaluateBindHost(h, {}, local), { ok: true, lan: false });
@@ -16,9 +16,9 @@ test('wildcards, hostnames and public addresses are refused even with the opt-in
 });
 
 test('a LAN address needs the explicit opt-in', () => {
-  assert.equal(evaluateBindHost('192.168.1.84', {}, local).ok, false);
-  assert.equal(evaluateBindHost('192.168.1.84', { ALLOW_LAN_BIND: 'yes' }, local).ok, false);
-  assert.deepEqual(evaluateBindHost('192.168.1.84', { ALLOW_LAN_BIND: 'true' }, local), { ok: true, lan: true });
+  assert.equal(evaluateBindHost('10.0.0.5', {}, local).ok, false);
+  assert.equal(evaluateBindHost('10.0.0.5', { ALLOW_LAN_BIND: 'yes' }, local).ok, false);
+  assert.deepEqual(evaluateBindHost('10.0.0.5', { ALLOW_LAN_BIND: 'true' }, local), { ok: true, lan: true });
 });
 
 test('a LAN address must belong to this machine', () => {

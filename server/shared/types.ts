@@ -1579,6 +1579,8 @@ export type FileTreeWorkspaceGateway = {
   rootPath: string;
   /** Every allowed root (PROJECTS_ROOTS). Defaults to `[rootPath]` when omitted. */
   rootPaths?: string[];
+  /** Real paths that stay off-limits even inside a root (credential folders). */
+  deniedPaths?: string[];
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
   /**
    * Resolves a path readable outside the workspace root — the system temp

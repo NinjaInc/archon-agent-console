@@ -137,9 +137,22 @@ Decisions made along the way (beyond section 2):
 Not done / not verifiable here: cloudflared and Cloudflare credentials are absent, so tunnel routing, Access policy,
 passkey registration with a real authenticator and reboot persistence were not exercised end to end.
 
-- **D15 - LAN bind (user decision, 2026-11-18):** cloudflared lives on another host (APP01), so the console must be reachable
+- **D15 - LAN bind (user decision, 2026-11-18):** cloudflared lives on another host, so the console must be reachable
   on this box's LAN address. `HOST` may now be one private RFC 1918 IPv4 that belongs to this machine, and only with
   `ALLOW_LAN_BIND=true`; `0.0.0.0`, `::`, hostnames and public addresses are still refused (`server/shared/bind-host.ts`, tested).
   Running live as a *user* systemd service (`~/.config/systemd/user/archon-agent-console.service`, linger on) under `dev`,
-  bound to 192.168.1.84:3001, env in `~/.config/archon-agent-console/env` (0600). Cloudflare Access verification is OFF until the
+  bound to the box's LAN IP on port 3001, env in `~/.config/archon-agent-console/env` (0600). Cloudflare Access verification is OFF until the
   Access app exists. Plain-http LAN access cannot sign in (passkeys + `__Host-` cookie need https); use the tunnel hostname.
+- **D16 - home directory as a root (user decision, 2026-11-18):** the Claude sessions live in `/home/dev`, so the Antigravity tab
+  failed with "Project path is outside the allowed projects roots". `/home/dev` is now an allowed root *with a deny-list*
+  (`DENIED_PATHS`, override `PROJECTS_DENY`): `.ssh .gnupg .aws .azure .kube .docker .config .npm .netrc .git-credentials .cloudcli
+  .claude .claude-code-ui .gemini .codex .cursor .local/share/keyrings .bash_history`. The deny-list covers the file explorer
+  (not listed, not readable/writable, symlinks resolved), the terminal start folder and project creation. It does NOT sandbox the
+  terminal or the agents themselves: a shell or agent run as `dev` can still `cat ~/.ssh/...`. Tested on the real filesystem.
+
+## 7. Session 2 additions (2026-11-18)
+
+- **D17 - agy chat permissions are explicit.** Measured with real agy: in print mode with no `--mode`, agy writes files and runs shell commands anywhere as the server user (the "request-review" label is not enforced). The chat therefore always passes `--mode`: `plan` (read-only), `accept-edits` (default: edits yes, commands denied unless on `permissions.allow`), `auto` (everything; granted one message at a time in the UI). `--dangerously-skip-permissions` is never used. Allow-rules are exact simple command lines only (`command(npm test)`); `*` patterns behaved unpredictably in testing and are refused.
+- **D18 - security review (two Opus reviewers, read-only).** Fixed: absolute-path read bypassing the deny-list; deny-list extended (shell/git startup files, `.claude.json`, `.local`, `.cache`, ...); AI commit-message call no longer bypasses permissions (no tools, no repo/user settings); anonymous 50 MB bodies (now 100 KB unless signed in); unauthenticated `/health` version leak; `TRUST_PROXY` so the shared tunnel does not put every visitor in one rate-limit bucket; agy process-group kill, SSE heartbeat, size/concurrency caps, conversation-id validation; skills import refuses symlinks, writes exclusively, and needs confirmation for hooks / `allowed-tools` / `!` shell lines / scripts; remote images blocked in agy chat; browser-use bridge now calls the real bind host and compares its token in constant time; user unit: no core dumps, seccomp limits, read-only login-persistence files.
+- **Left open on purpose (owner decisions):** `dev` has passwordless sudo, and the user D-Bus lets a child escape `NoNewPrivileges` (fix: remove NOPASSWD or run as the dedicated `archon` user); the tunnel is shared with another host (LAN bind + plain http on that hop); Claude loads a repo's `.claude/settings.json` hooks (`settingSources` includes `project`), so cloning an untrusted fork and chatting in it can run its hooks; worktrees `resolveProjectPath` does not re-check roots (fails safe today).
+- **Preview:** the Browser tab gained a Preview bar (URL box + detected local servers) that opens a page in the server-side Chromium. Needs the Browser enabled in Settings and its runtime installed (Playwright Chromium download; system libraries may need sudo).

@@ -206,6 +206,55 @@ function resolveWorkspaceRoots(): string[] {
  */
 export const WORKSPACE_ROOTS = resolveWorkspaceRoots();
 
+/**
+ * Credential folders and files that stay off-limits even when they sit inside an allowed root,
+ * for example when the home directory itself is a root. Entries are relative to the home directory
+ * unless absolute. Override the whole list with PROJECTS_DENY (comma separated).
+ */
+const DEFAULT_DENIED_NAMES = [
+  // Keys, cloud and registry logins
+  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config', '.npm', '.npmrc', '.pypirc', '.netrc',
+  '.git-credentials', '.vault-token', '.password-store', '.terraform.d', '.pki', '.mozilla',
+  // The agents' own logins, MCP definitions and this app's database
+  '.cloudcli', '.claude', '.claude.json', '.claude-code-ui', '.gemini', '.codex', '.cursor',
+  // Files that run commands at login or on git operations (writing them is code execution)
+  '.bashrc', '.bash_profile', '.bash_logout', '.profile', '.zshrc', '.zprofile', '.gitconfig', '.git', '.bash_history',
+  // Tool installs, caches and per-app logins (also holds this server's log with one-time setup tokens)
+  '.local', '.cache',
+];
+
+function resolveDeniedPaths(): string[] {
+  const configured = process.env.PROJECTS_DENY;
+  const names = configured === undefined
+    ? DEFAULT_DENIED_NAMES
+    : configured.split(',').map((entry) => entry.trim()).filter(Boolean);
+  const resolved = new Set<string>();
+  for (const name of names) {
+    const lexical = path.isAbsolute(name) ? path.resolve(name) : path.join(os.homedir(), name);
+    resolved.add(lexical);
+    try {
+      resolved.add(fs.realpathSync(lexical));
+    } catch {
+      // Not present on this machine; the lexical form still blocks it if it appears later.
+    }
+  }
+  return [...resolved];
+}
+
+/**
+ * Folders and files the file explorer, shell working directory and project creation refuse,
+ * checked after symlink resolution and in addition to the allowed roots (see PROJECTS_DENY).
+ */
+export const DENIED_PATHS = resolveDeniedPaths();
+
+/**
+ * True when `candidate` is one of the denied paths or lives under one. Compare real (symlink
+ * resolved) paths wherever possible so a link cannot be used to reach a denied folder.
+ */
+export function isDeniedPath(candidate: string, denied: readonly string[] = DENIED_PATHS): boolean {
+  return denied.some((entry) => candidate === entry || candidate.startsWith(`${entry}${path.sep}`));
+}
+
 /** The first workspace root: where browsing starts and where `~` points in the folder picker. */
 export const WORKSPACES_ROOT = WORKSPACE_ROOTS[0];
 
@@ -281,7 +330,7 @@ const READ_ONLY_ROOTS = [...new Set([
  * its own, so one that does not exist on this machine — `/tmp` on Windows — is
  * skipped and the roots after it are still checked.
  */
-export async function resolvePathUnderRoots(targetPath: string, roots: string[]): Promise<string | null> {
+export async function resolvePathUnderRoots(targetPath: string, roots: string[], denied: readonly string[] = []): Promise<string | null> {
   const normalizedTarget = normalizeProjectPath(targetPath);
   if (!normalizedTarget || !path.isAbsolute(normalizedTarget)) {
     return null;
@@ -304,7 +353,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
     }
 
     if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
-      return resolvedPath;
+      return isDeniedPath(resolvedPath, denied) ? null : resolvedPath;
     }
   }
 
@@ -462,6 +511,9 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         valid: false,
         error: `Workspace path must be within the allowed workspace roots: ${WORKSPACE_ROOTS.join(', ')}`,
       };
+    }
+    if (isDeniedPath(resolvedPath)) {
+      return { valid: false, error: 'Workspace path is a protected credentials folder' };
     }
 
     try {

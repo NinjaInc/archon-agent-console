@@ -16,6 +16,7 @@ import {
     IS_PLATFORM,
     resolvePathUnderRoots,
     terminalTextStyles,
+    DENIED_PATHS,
     WORKSPACE_ROOTS,
 } from '@/shared/utils.js';
 import {
@@ -63,6 +64,10 @@ import {
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { agyRoutes, getAgyLaunchEnvironment } from './modules/agy/index.js';
+import { getProdClaudeLaunch, prodClaudeRoutes } from './modules/prod-claude/index.js';
+import { githubReposRoutes } from './modules/github-repos/index.js';
+import { skillsImportRoutes } from './modules/skills-import/index.js';
+import { agyChatRoutes } from './modules/agy-chat/index.js';
 import { cfAccessGate, isCfAccessRequired, verifyCfAccessUpgrade } from './modules/cf-access/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
@@ -131,7 +136,8 @@ createWebSocketServer(server, {
     },
     shell: {
         // Terminals may only start inside the configured projects roots.
-        resolveAllowedProjectPath: (candidate) => resolvePathUnderRoots(candidate, WORKSPACE_ROOTS),
+        resolveAllowedProjectPath: (candidate) => resolvePathUnderRoots(candidate, WORKSPACE_ROOTS, DENIED_PATHS),
+        getProdClaudeLaunch,
         getAgentEnvironment: async (provider) =>
             provider === 'agy' ? getAgyLaunchEnvironment() : {},
         resolveProviderSessionId: (sessionId, provider) => {
@@ -156,25 +162,37 @@ if (IS_PLATFORM) {
     process.exit(1);
 }
 
-// Behind cloudflared the TCP peer is 127.0.0.1; trust only loopback proxies so
-// X-Forwarded-For (the real client IP, used for rate limiting) cannot be spoofed by direct clients.
-app.set('trust proxy', 'loopback');
+// Behind cloudflared the TCP peer is the connector, so trust only the proxies named here
+// (default: loopback) and X-Forwarded-For - the real client IP, used for rate limiting - cannot be
+// spoofed by direct clients. When the connector is another host on the LAN, name it in TRUST_PROXY,
+// e.g. TRUST_PROXY=loopback,192.168.1.0/24, or every internet visitor shares one rate-limit bucket.
+const TRUST_PROXY_ENTRY = /^(loopback|linklocal|uniquelocal|[0-9a-fA-F:.]+(\/\d{1,3})?)$/;
+const trustedProxies = (process.env.TRUST_PROXY || 'loopback').split(',').map((entry) => entry.trim()).filter(Boolean);
+if (trustedProxies.length === 0 || !trustedProxies.every((entry) => TRUST_PROXY_ENTRY.test(entry))) {
+    console.error(`[FATAL] TRUST_PROXY must be a comma-separated list of loopback, linklocal, uniquelocal, IPs or CIDRs (got "${process.env.TRUST_PROXY}").`);
+    process.exit(1);
+}
+app.set('trust proxy', trustedProxies);
 app.disable('x-powered-by');
 
 // Same-origin only: the browser app is served from this origin, so CORS is not opened to anyone else.
 app.use(cors({ origin: authConfig.origin, credentials: true, exposedHeaders: ['X-Auth-Error'] }));
-app.use(express.json({
-    limit: '50mb',
-    type: (req) => {
-        // Skip multipart/form-data requests (for file uploads like images)
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('multipart/form-data')) {
-            return false;
-        }
-        return contentType.includes('json');
+const isJsonRequest = (req: http.IncomingMessage) => {
+    // Skip multipart/form-data requests (for file uploads like images)
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+        return false;
     }
-}));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+    return contentType.includes('json');
+};
+// Large bodies (pasted images, big files) are for signed-in users only: a request without a valid
+// session gets a 100 KB limit, so an anonymous caller cannot make the server parse 50 MB per request.
+const signedInJson = express.json({ limit: '50mb', type: isJsonRequest });
+const anonymousJson = express.json({ limit: '100kb', type: isJsonRequest });
+const signedInForm = express.urlencoded({ limit: '50mb', extended: true });
+const anonymousForm = express.urlencoded({ limit: '100kb', extended: true });
+app.use((req, res, next) => (isSessionActive(req) ? signedInJson : anonymousJson)(req, res, next));
+app.use((req, res, next) => (isSessionActive(req) ? signedInForm : anonymousForm)(req, res, next));
 
 // Minimal liveness probe for systemd/monitoring: no version, paths or other details.
 app.get('/healthz', (_req, res) => {
@@ -182,8 +200,14 @@ app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok' });
 });
 
-// Public health check endpoint (no authentication required)
+// Health check: anyone gets liveness; the version and install mode go to signed-in users only
+// (the app itself reads them after login to detect a stale server process).
 app.get('/health', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!isSessionActive(req)) {
+        res.json({ status: 'ok' });
+        return;
+    }
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -210,6 +234,18 @@ app.use('/api/assets', authenticateToken, assetsRoutes);
 
 // Antigravity (agy) auth configuration (protected; never returns the key)
 app.use('/api/agy', authenticateToken, agyRoutes);
+
+// Prod Claude: whether to show the terminal that connects to the production host's own Claude Code (protected)
+app.use('/api/prod-claude', authenticateToken, prodClaudeRoutes);
+
+// GitHub repositories (protected; uses the server's own `gh` login, never exposes a token)
+app.use('/api/github-repos', authenticateToken, githubReposRoutes);
+
+// Skills import: installs SKILL.md for Claude Code and Antigravity (protected)
+app.use('/api/skills-import', authenticateToken, skillsImportRoutes);
+
+// Antigravity chat: structured agy turns streamed as SSE (protected)
+app.use('/api/agy-chat', authenticateToken, agyChatRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);

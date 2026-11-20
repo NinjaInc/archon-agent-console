@@ -250,6 +250,39 @@ export const api = {
   deleteProject: (projectId: string, hardDelete = false) =>
     del(`/api/projects/${projectId}${query({ force: hardDelete })}`),
   createProject: (projectData: unknown) => post('/api/projects/create-project', projectData),
+  // The exact commands Antigravity may run without asking (agy's permissions.allow command rules).
+  agyPermissions: {
+    get: () => get('/api/agy/permissions'),
+    set: (commands: string[]) => put('/api/agy/permissions', { commands }),
+  },
+  // Antigravity (agy) chats. `send` answers with a Server-Sent Events stream, so it returns the raw Response.
+  agyChat: {
+    models: () => get('/api/agy-chat/models'),
+    list: (projectId: string) => get(`/api/agy-chat${query({ projectId })}`),
+    create: (projectId: string, model?: string) => post('/api/agy-chat', { projectId, model }),
+    get: (chatId: string) => get(`/api/agy-chat/${encodeURIComponent(chatId)}`),
+    remove: (chatId: string) => del(`/api/agy-chat/${encodeURIComponent(chatId)}`),
+    stop: (chatId: string) => post(`/api/agy-chat/${encodeURIComponent(chatId)}/stop`),
+    send: (chatId: string, body: { text: string; model?: string; mode?: 'plan' | 'accept-edits' | 'auto' }, signal?: AbortSignal) =>
+      authenticatedFetch(`/api/agy-chat/${encodeURIComponent(chatId)}/messages`, { method: 'POST', body: JSON.stringify(body), signal }),
+  },
+  // Whether the Prod Claude terminal (ssh to the production host's own Claude Code) is set up.
+  prodClaude: {
+    status: () => get('/api/prod-claude/status'),
+  },
+  // Install, list and remove SKILL.md skills for Claude Code and Antigravity.
+  skillsImport: {
+    list: (projectId?: string) => get(`/api/skills-import${query({ projectId })}`),
+    preview: (body: unknown) => post('/api/skills-import/preview', body),
+    import: (body: unknown) => post('/api/skills-import/import', body),
+    remove: (body: unknown) => post('/api/skills-import/remove', body),
+  },
+  // GitHub repositories of the server's own `gh` login (the token never reaches the browser).
+  githubRepos: {
+    list: (refresh = false) => get(`/api/github-repos${query({ refresh: refresh ? 1 : undefined })}`),
+    open: (nameWithOwner: string) => post('/api/github-repos/open', { nameWithOwner }),
+    clone: (nameWithOwner: string) => post('/api/github-repos/clone', { nameWithOwner }),
+  },
   migrateLegacyProjectStars: (projectIds: string[]) =>
     post('/api/projects/migrate-legacy-stars', { projectIds }),
   toggleProjectStar: (projectId: string) =>
@@ -634,6 +667,8 @@ export const api = {
     deleteSession: (sessionId: string) => del(`/api/browser-use/sessions/${sessionId}`),
     sendInput: (sessionId: string, input: unknown) => post(`/api/browser-use/sessions/${sessionId}/input`, input),
     installRuntime: () => post('/api/browser-use/runtime/install'),
+    localServers: () => get('/api/browser-use/local-servers'),
+    preview: (url: string) => post('/api/browser-use/preview', { url }),
   },
 
   voice: {

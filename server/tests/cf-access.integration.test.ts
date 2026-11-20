@@ -96,7 +96,7 @@ test('the server refuses wildcard binds', async () => {
 
 test('the server refuses a LAN address unless ALLOW_LAN_BIND=true', async () => {
   const port = await freePort();
-  const server = start({ SERVER_PORT: String(port), HOST: '192.168.1.84', ALLOW_LAN_BIND: '' });
+  const server = start({ SERVER_PORT: String(port), HOST: '10.0.0.5', ALLOW_LAN_BIND: '' });
   const code = await Promise.race([server.exited, new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 45_000))]);
   assert.notEqual(code, 'timeout');
   assert.equal(code, 1);

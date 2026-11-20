@@ -67,3 +67,50 @@ test('clearApiKey removes the key and unsets the provider it set', async () => {
   assert.deepEqual(JSON.parse(files.get('/h/settings.json')!), { colorScheme: 'x' });
   assert.deepEqual(await service.getLaunchEnvironment(), {});
 });
+
+// ---- allowed commands (agy permissions.allow) ----
+
+function permissionsHarness(initial: Record<string, unknown> | null) {
+  const files = new Map<string, string>();
+  if (initial) files.set('/settings.json', JSON.stringify(initial));
+  const service = createAgyService({
+    settingsPath: '/settings.json',
+    apiKeyPath: '/agy.env',
+    oauthTokenPath: '/oauth',
+    fileSystem: {
+      readFile: async (p) => files.get(p) ?? null,
+      writeSecretFile: async (p, c) => { files.set(p, c); },
+      removeFile: async (p) => { files.delete(p); },
+      exists: async (p) => files.has(p),
+    },
+  });
+  return { service, read: () => JSON.parse(files.get('/settings.json') ?? '{}') };
+}
+
+test('allowed commands are saved as command(<line>) rules and keep every other setting and rule', async () => {
+  const { service, read } = permissionsHarness({ model: 'x', trustedWorkspaces: ['/a'], permissions: { allow: ['read(**)'], deny: ['command(rm -rf /)'] } });
+  const result = await service.setAllowedCommands(['npm test', 'git status', 'npm test']);
+  assert.deepEqual(result, { commands: ['npm test', 'git status'], otherRules: 1 });
+  assert.deepEqual(read().permissions, { allow: ['read(**)', 'command(npm test)', 'command(git status)'], deny: ['command(rm -rf /)'] });
+  assert.equal(read().model, 'x');
+  assert.deepEqual(read().trustedWorkspaces, ['/a']);
+  assert.deepEqual((await service.setAllowedCommands([])).commands, []);
+  assert.deepEqual(read().permissions.allow, ['read(**)']);
+});
+
+test('only plain exact command lines are accepted: no shell syntax, wildcards, quotes or empties', async () => {
+  const { service, read } = permissionsHarness(null);
+  const bad = ['', '  ', 'npm test; rm -rf ~', 'a && b', 'a | b', 'a > b', 'echo $(id)', 'echo `id`', 'touch *', 'ls ?', "echo 'x'", 'echo "x"', 'a\nb', 'a  b', 'x'.repeat(201), '(ls)', 'a\\b'];
+  for (const line of bad) {
+    await assert.rejects(service.setAllowedCommands([line]), { code: 'AGY_COMMAND_INVALID' }, JSON.stringify(line));
+  }
+  await assert.rejects(service.setAllowedCommands('npm test'), { code: 'AGY_COMMANDS_INVALID' });
+  await assert.rejects(service.setAllowedCommands(Array.from({ length: 51 }, (_, i) => `cmd${i}`)), { code: 'AGY_COMMANDS_INVALID' });
+  assert.deepEqual(read(), {});
+});
+
+test('reading allowed commands tolerates a missing file and other rule types', async () => {
+  assert.deepEqual(await permissionsHarness(null).service.getAllowedCommands(), { commands: [], otherRules: 0 });
+  const { service } = permissionsHarness({ permissions: { allow: ['command(ls -la)', 'write(/tmp/**)', 42] } });
+  assert.deepEqual(await service.getAllowedCommands(), { commands: ['ls -la'], otherRules: 1 });
+});

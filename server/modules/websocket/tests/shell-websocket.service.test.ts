@@ -822,3 +822,65 @@ test('a terminal cannot be started outside the allowed projects roots', async ()
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(spawned, 1);
 });
+
+test('Prod Claude starts ssh from an empty environment and never runs through this server\'s shell', async () => {
+  process.env.GEMINI_API_KEY = 'leak-check-gemini';
+  process.env.SSH_AUTH_SOCK = '/tmp/leak-check-agent.sock';
+  const spawned: { file: string; args: string[]; env: Record<string, string> }[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    getProdClaudeLaunch: async () => ({ file: 'ssh', args: ['-tt', 'deploy@192.0.2.10', 'claude'], env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' } }),
+    spawnPty: ((file: string, args: string[], options: { env: Record<string, string> }) => {
+      spawned.push({ file, args, env: options.env });
+      return createFakePty() as never;
+    }) as never,
+  };
+  try {
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, dependencies);
+    socket.emit('message', JSON.stringify({ type: 'init', projectPath: process.cwd(), sessionId: 'prod-env-test', hasSession: false, provider: 'prod-claude' }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(spawned.length, 1);
+    assert.equal(spawned[0].file, 'ssh');
+    assert.deepEqual(spawned[0].args, ['-tt', 'deploy@192.0.2.10', 'claude']);
+    assert.deepEqual(Object.keys(spawned[0].env).sort(), ['COLORTERM', 'LANG', 'PATH', 'TERM']);
+    assert.ok(!JSON.stringify(spawned[0].env).includes('leak-check'));
+    assert.ok(socket.frames.some((frame) => frame.includes('PRODUCTION Claude')), 'the terminal says plainly that this is production');
+  } finally {
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.SSH_AUTH_SOCK;
+  }
+});
+
+test('Prod Claude that is not set up starts nothing and says so', async () => {
+  let spawnedCount = 0;
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => null,
+    getProdClaudeLaunch: async () => null,
+    spawnPty: () => { spawnedCount += 1; return createFakePty() as never; },
+  });
+  socket.emit('message', JSON.stringify({ type: 'init', projectPath: process.cwd(), sessionId: 'prod-unset-test', hasSession: false, provider: 'prod-claude' }));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(spawnedCount, 0);
+  assert.ok(socket.frames.some((frame) => frame.includes('not set up')));
+});
+
+test('Prod Claude has its own terminal slot: it never reattaches to the local Claude terminal', async () => {
+  const spawned: string[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    getProdClaudeLaunch: async () => ({ file: 'ssh', args: ['x'], env: { PATH: '/usr/bin' } }),
+    spawnPty: (file: string) => { spawned.push(file); return createFakePty() as never; },
+  };
+  const project = process.cwd();
+  const local = createFakeSocket();
+  handleShellConnection(local as never, dependencies);
+  local.emit('message', JSON.stringify({ type: 'init', projectPath: project, sessionId: 'slot-test', hasSession: false, provider: 'claude' }));
+  const prod = createFakeSocket();
+  handleShellConnection(prod as never, dependencies);
+  prod.emit('message', JSON.stringify({ type: 'init', projectPath: project, sessionId: 'slot-test', hasSession: false, provider: 'prod-claude' }));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(spawned, ['bash', 'ssh']);
+  assert.ok(!prod.frames.some((frame) => frame.includes('Reconnected to existing session')));
+});

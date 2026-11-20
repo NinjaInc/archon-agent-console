@@ -18,9 +18,11 @@
     "browse": "Browse"
   },
   "tabs": {
-    "chat": "Chat",
-    "shell": "Shell",
+    "chat": "Claude Chat",
+    "shell": "Claude",
     "agy": "Antigravity",
+    "prod": "Prod Claude",
+    "agyChat": "Agy Chat",
     "files": "Files",
     "git": "Source Control",
     "tasks": "Tasks",

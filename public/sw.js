@@ -85,7 +85,9 @@ self.addEventListener('push', event => {
   const options = {
     body: payload.body || '',
     icon: '/logo-256.png',
-    badge: '/logo-128.png',
+    // Android draws the badge in the status bar from its alpha channel only, so it must be a white-on-clear glyph.
+    badge: '/badge-96.png',
+    vibrate: [120, 60, 120],
     data: payload.data || {},
     tag: payload.data?.tag || `${payload.data?.sessionId || 'global'}:${payload.data?.code || 'default'}`,
     renotify: true
@@ -113,6 +115,7 @@ self.addEventListener('notificationclick', event => {
             type: 'notification:navigate',
             sessionId: sessionId || null,
             provider,
+            tab: event.notification.data?.tab || null,
             urlPath
           });
           return;

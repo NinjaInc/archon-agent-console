@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
+import BrowserPreviewBar from '@/modules/browser-use/BrowserPreviewBar';
 import { Badge, Button, Input } from '@/shared/ui';
 import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
@@ -534,6 +535,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           </Button>
         </div>
       </div>
+
+      <BrowserPreviewBar enabled={Boolean(status?.enabled)} onOpened={() => void refresh()} />
 
       {error && (
         <div className="border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">

@@ -25,7 +25,7 @@ export default function AboutTab() {
     <div className="space-y-6">
       {/* Logo + name + version */}
       <div className="flex items-center gap-3">
-        <img src="/logo.svg" alt="Archon Tech" className="h-10 w-auto flex-shrink-0" />
+        <img src="/logo-128.png" alt="Archon Tech" className="h-10 w-10 flex-shrink-0" />
         <div>
           <div className="flex items-center gap-2">
             <span

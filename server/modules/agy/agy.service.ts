@@ -19,6 +19,11 @@ type AgyDependencies = {
 };
 
 const API_KEY_PATTERN = /^[A-Za-z0-9_\-]{20,256}$/;
+const MAX_ALLOWED_COMMANDS = 50;
+// A rule only ever allows ONE exact, simple command line: words separated by single spaces, no shell
+// syntax. agy matches the whole line, so `git status` allows `git status` and nothing chained after it.
+const COMMAND_LINE = /^[A-Za-z0-9._/:=@,+-]+( [A-Za-z0-9._/:=@,+-]+)*$/;
+const COMMAND_RULE = /^command\((.*)\)$/s;
 
 function parseSettings(raw: string | null): Record<string, unknown> {
   if (!raw) {
@@ -36,6 +41,12 @@ function parseSettings(raw: string | null): Record<string, unknown> {
       statusCode: 409,
     });
   }
+}
+
+function readAllowRules(settings: Record<string, unknown>): string[] {
+  const permissions = settings.permissions;
+  const allow = typeof permissions === 'object' && permissions !== null ? (permissions as { allow?: unknown }).allow : undefined;
+  return Array.isArray(allow) ? allow.filter((rule): rule is string => typeof rule === 'string') : [];
 }
 
 /**
@@ -85,6 +96,42 @@ export function createAgyService(dependencies: AgyDependencies) {
         await fileSystem.writeSecretFile(dependencies.settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
       }
       return this.getStatus();
+    },
+
+    /** The exact command lines agy may run without asking (`permissions.allow` entries of the form command(<line>)). */
+    async getAllowedCommands() {
+      const settings = parseSettings(await fileSystem.readFile(dependencies.settingsPath));
+      const allow = readAllowRules(settings);
+      return {
+        commands: allow.map((rule) => COMMAND_RULE.exec(rule)?.[1]).filter((line): line is string => typeof line === 'string'),
+        otherRules: allow.filter((rule) => !COMMAND_RULE.test(rule)).length,
+      };
+    },
+
+    /** Replaces the allowed command lines; other kinds of rules in settings.json are kept as they are. */
+    async setAllowedCommands(input: unknown) {
+      if (!Array.isArray(input) || input.length > MAX_ALLOWED_COMMANDS) {
+        throw new AppError(`Send up to ${MAX_ALLOWED_COMMANDS} commands`, { code: 'AGY_COMMANDS_INVALID', statusCode: 400 });
+      }
+      const commands = [...new Set(input.map((entry) => (typeof entry === 'string' ? entry.trim() : '')))];
+      for (const line of commands) {
+        if (line.length === 0 || line.length > 200 || !COMMAND_LINE.test(line)) {
+          throw new AppError('A command is plain words only: no quotes, pipes, ; & > < $ ` ( ) or wildcards', {
+            code: 'AGY_COMMAND_INVALID',
+            statusCode: 400,
+          });
+        }
+      }
+      const settings = parseSettings(await fileSystem.readFile(dependencies.settingsPath));
+      const kept = readAllowRules(settings).filter((rule) => !COMMAND_RULE.test(rule));
+      const permissions = typeof settings.permissions === 'object' && settings.permissions !== null && !Array.isArray(settings.permissions)
+        ? (settings.permissions as Record<string, unknown>)
+        : {};
+      await fileSystem.writeSecretFile(
+        dependencies.settingsPath,
+        `${JSON.stringify({ ...settings, permissions: { ...permissions, allow: [...kept, ...commands.map((line) => `command(${line})`)] } }, null, 2)}\n`,
+      );
+      return this.getAllowedCommands();
     },
 
     /** Environment to add to an agy PTY only; empty when no API key is configured. */

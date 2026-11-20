@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Response } from 'express';
 
+import { listLocalServers } from '@/modules/browser-use/browser-use-local-servers.js';
 import { browserUseService } from '@/modules/browser-use/browser-use.service.js';
 
 const router = express.Router();
@@ -22,6 +23,7 @@ export const BROWSER_USE_ERROR_CODES = {
   SESSION_STOP_FAILED: 'BROWSER_USE_SESSION_STOP_FAILED',
   SESSION_DELETE_FAILED: 'BROWSER_USE_SESSION_DELETE_FAILED',
   SESSION_INPUT_FAILED: 'BROWSER_USE_SESSION_INPUT_FAILED',
+  PREVIEW_FAILED: 'BROWSER_USE_PREVIEW_FAILED',
 } as const;
 
 function sendError(
@@ -110,6 +112,26 @@ router.post('/runtime/install', async (_req, res) => {
       'Failed to install Browser runtime.',
       error instanceof Error ? error.message : undefined,
     );
+  }
+});
+
+// Servers the user has running on this machine (dev servers etc.), offered as one-click previews.
+router.get('/local-servers', async (_req, res) => {
+  const servers = await listLocalServers(Number(process.env.SERVER_PORT || process.env.PORT || 3001));
+  res.json({ success: true, data: { servers } });
+});
+
+// Opens a URL in the server-side browser so it can be watched and clicked in the Browser tab.
+router.post('/preview', async (req, res) => {
+  try {
+    const url = (req.body as { url?: unknown } | undefined)?.url;
+    if (typeof url !== 'string') {
+      sendError(res, 400, BROWSER_USE_ERROR_CODES.PREVIEW_FAILED, 'A URL is required.');
+      return;
+    }
+    res.json({ success: true, data: { session: await browserUseService.previewUrl(url) } });
+  } catch (error) {
+    sendError(res, 400, BROWSER_USE_ERROR_CODES.PREVIEW_FAILED, error instanceof Error ? error.message : 'Preview failed.');
   }
 });
 

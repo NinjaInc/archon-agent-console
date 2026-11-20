@@ -14,6 +14,22 @@ export function createAgyRouter(service: ReturnType<typeof createAgyService>): e
     }
   });
 
+  router.get('/permissions', async (_req, res, next) => {
+    try {
+      res.json(await service.getAllowedCommands());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put('/permissions', async (req, res, next) => {
+    try {
+      res.json(await service.setAllowedCommands((req.body as { commands?: unknown }).commands));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.put('/api-key', async (req, res, next) => {
     try {
       const body = req.body as { apiKey?: unknown };
