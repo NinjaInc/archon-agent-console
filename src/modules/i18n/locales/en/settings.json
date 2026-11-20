@@ -933,7 +933,7 @@
     "unknownError": "Unknown error"
   },
   "about": {
-    "tagline": "Private, passkey-secured console for Claude Code and Antigravity",
+    "tagline": "Private, passkey-secured console for Claude Code, Antigravity and your local models",
     "starOnGitHub": "View on GitHub",
     "docs": "Docs",
     "hostedTitle": "Try CloudCLI Hosted",

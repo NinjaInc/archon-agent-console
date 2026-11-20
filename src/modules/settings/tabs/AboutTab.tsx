@@ -1,4 +1,4 @@
-import { ExternalLink, Star } from 'lucide-react';
+import { Bell, BookOpen, Cpu, ExternalLink, GitBranch, KeyRound, MessageSquare, MessageSquareText, Star, Terminal, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { BRAND_WORDMARK_FONT_FAMILY } from '@/shared/constants';
@@ -7,6 +7,26 @@ import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 const FORK_REPO_URL = 'https://github.com/NinjaInc/archon-agent-console';
 const UPSTREAM_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 const ARCHON_TECH_URL = 'https://archontech.au';
+
+type Feature = { icon: LucideIcon; title: string; text: string };
+
+// What the console does, in plain words. Kept in step with the README; English defaults so every language shows something sensible.
+const FEATURES: Feature[] = [
+  { icon: KeyRound, title: 'Passkey sign-in', text: 'No passwords. One owner, one passkey, optional Cloudflare Access in front.' },
+  { icon: MessageSquare, title: 'Claude Chat', text: 'Claude Code chat with history, tool approvals and file references. The default view.' },
+  { icon: MessageSquareText, title: 'Agy Chat', text: 'Structured Antigravity chat with permission modes, live progress and saved history.' },
+  { icon: Cpu, title: 'Local LLM', text: 'A small model on your own hardware via Ollama. Draft only: no tools, nothing written or run.' },
+  { icon: Terminal, title: 'Terminals', text: 'Claude Code and agy terminals in the project folder, plus an isolated Prod Claude tab.' },
+  { icon: GitBranch, title: 'Repos and worktrees', text: 'Clone from GitHub, then launch an agent in its own worktree.' },
+  { icon: BookOpen, title: 'Skills', text: 'Import SKILL.md files, folders or zips for Claude Code and Antigravity.' },
+  { icon: Bell, title: 'Phone alerts', text: 'Push notifications to Android Chrome when a long reply or a run finishes.' },
+];
+
+const SCREENSHOTS = [
+  { src: '/about/agy-chat.webp', alt: 'Agy Chat with tool steps and a streamed reply' },
+  { src: '/about/local-llm.webp', alt: 'The Local LLM tab drafting a commit message' },
+  { src: '/about/github.webp', alt: 'GitHub repositories view' },
+];
 
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -23,6 +43,8 @@ export default function AboutTab() {
 
   return (
     <div className="space-y-6">
+      <img src="/brand/banner.webp" alt="Archon Agent Console by Archon Tech" className="w-full max-w-md rounded-xl border border-border/50" />
+
       {/* Logo + name + version */}
       <div className="flex items-center gap-3">
         <img src="/logo-128.png" alt="Archon Tech" className="h-10 w-10 flex-shrink-0" />
@@ -52,6 +74,31 @@ export default function AboutTab() {
         <Star className="h-3.5 w-3.5" />
         <span>{t('about.starOnGitHub')}</span>
       </a>
+
+      {/* What it does */}
+      <div>
+        <h3 className="mb-3 text-sm font-semibold text-foreground">{t('about.whatItDoes', { defaultValue: 'What is inside' })}</h3>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {FEATURES.map((feature) => (
+            <li key={feature.title} className="flex gap-2.5 rounded-lg border border-border/50 bg-muted/20 p-2.5">
+              <feature.icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-foreground">{feature.title}</p>
+                <p className="text-xs text-muted-foreground">{feature.text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Screenshots */}
+      <div className="grid gap-2 sm:grid-cols-3">
+        {SCREENSHOTS.map((shot) => (
+          <a key={shot.src} href={shot.src} target="_blank" rel="noopener noreferrer" className="overflow-hidden rounded-lg border border-border/50 transition-opacity hover:opacity-90">
+            <img src={shot.src} alt={shot.alt} loading="lazy" className="h-full w-full object-cover" />
+          </a>
+        ))}
+      </div>
 
       {/* Links */}
       <div className="flex flex-wrap gap-4 text-sm">

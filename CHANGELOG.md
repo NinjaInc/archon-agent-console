@@ -25,11 +25,16 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 * Android Chrome push notifications for Agy Chat, a status-bar badge, and tap-to-open
 * `scripts/install-craft-mcp.sh`: signed, verified install of ArtCraft's Crafting Apps as MCP servers
 * Archon Tech branding, PWA icons, a "More" menu for plugin tools, and a new tab order (chats together, terminals together)
+* **Local LLM** tab: a small model on your own hardware via Ollama (default `qwen3:8b`) for draft-only chat and four task shortcuts (`/summarise-logs`, `/explain-diff`, `/commit-msg`, `/boilerplate`). No tools; secrets are refused before sending; diffs drop lockfiles, `.env` files and binaries; anything that does not fit the 8k window is refused, not cut. Health dot, cold-start and idle timeouts, warm-up, and an ask-first fallback to Claude Chat when the host is offline
+* `scripts/git-hooks/append-coauthor.sh`: an optional `prepare-commit-msg` helper that adds a `Co-Authored-By` trailer exactly once
 
 ### Changed
 
 * the project README, contributing guide and package metadata describe this project
 * the update checker follows this repository's releases, not upstream's
+* the sidebar opens on **Conversations** (recent chats across projects) with **Projects** as the second tab
+* *Settings → About* now shows the banner, what the console does (including the Local LLM) and screenshots
+* README and screenshots retaken from the current UI
 
 ### Removed
 

@@ -1,9 +1,9 @@
 <div align="center">
   <img src="docs/images/banner.webp" alt="Archon Agent Console by Archon Tech" width="640">
-  <p><strong>A private, passkey-secured web console for driving Claude Code and Google Antigravity against your project folders.</strong></p>
+  <p><strong>A private, passkey-secured web console for driving Claude Code, Google Antigravity and your own local models against your project folders.</strong></p>
   <p>
     <img src="https://img.shields.io/badge/login-passkeys%20only-6c4bff" alt="Passkeys only">
-    <img src="https://img.shields.io/badge/agents-Claude%20Code%20%2B%20Antigravity-1fb6d6" alt="Claude Code and Antigravity">
+    <img src="https://img.shields.io/badge/agents-Claude%20Code%20%2B%20Antigravity%20%2B%20Ollama-1fb6d6" alt="Claude Code, Antigravity and local models">
     <img src="https://img.shields.io/badge/node-%E2%89%A5%2022-339933" alt="Node 22 or newer">
     <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="AGPL-3.0-or-later">
   </p>
@@ -17,11 +17,11 @@
   </p>
 </div>
 
-![Agy Chat](docs/images/agy-chat.webp)
+![Conversations first: recent chats on the left, the open conversation on the right](docs/images/conversations.webp)
 
 ## What it does
 
-Archon Agent Console is one browser tab for the AI coding agents you run on a dev server. Open a project, chat with **Claude Code** or **Antigravity (`agy`)**, watch them read and edit files, browse the repo, and launch each task in its own git worktree. It is built to sit behind a Cloudflare tunnel and be safe to leave on the internet: nothing is reachable without a passkey, and the agents run as the service user, not as root.
+Archon Agent Console is one browser tab for the AI coding agents you run on a dev server. Open a project, chat with **Claude Code** or **Antigravity (`agy`)**, hand quick drafting jobs to a **local model**, watch the agents read and edit files, browse the repo, and launch each task in its own git worktree. It is built to sit behind a Cloudflare tunnel and be safe to leave on the internet: nothing is reachable without a passkey, and the agents run as the service user, not as root.
 
 Made by [Josh Neufield](https://archontech.au) at Archon Tech.
 
@@ -44,9 +44,13 @@ Made by [Josh Neufield](https://archontech.au) at Archon Tech.
 | **Antigravity** | The agy terminal (its own login flow works in the terminal). |
 | **Local LLM** *(optional)* | A small model on your own hardware via Ollama: draft-only chat and four task shortcuts. See below. |
 
+The sidebar opens on **Conversations** (your recent chats across every project, newest first); **Projects** is the second tab, next to the running-sessions and archive views. The last tab you used in a project is remembered for the visit.
+
 Tasks and the plugin tools (Claude Usage, Sessions, Scheduled Prompt and so on) live in the **More** menu at the end of the tab bar, so the sidebar stays free for your projects.
 
 ![The More menu](docs/images/more.webp)
+
+![Agy Chat: tool steps and a streamed reply](docs/images/agy-chat.webp)
 
 **Agy Chat has three permission modes**, chosen per message:
 
@@ -88,6 +92,8 @@ Claude, Codex and OpenCode runs notify as before. **Agy Chat** notifies when a r
 ### Local LLM (optional)
 
 A **Local LLM** tab sits next to the two chats when `OLLAMA_BASE_URL` is set. It talks to an [Ollama](https://ollama.com) server on your LAN, for example a gaming PC with a spare GPU, and is meant as a cheap drafting helper rather than an agent. The default model is `qwen3:8b`.
+
+![The Local LLM tab drafting a commit message from the staged changes](docs/images/local-llm.webp)
 
 - **No tools, draft only.** The model gets no filesystem or shell access. Everything it writes is shown as a *Draft* with a Copy button; nothing is saved, run or committed from this tab.
 - **Task shortcuts** (buttons, or type the slash command): `/summarise-logs` (paste logs after it), `/explain-diff`, `/commit-msg` (from the staged diff), `/boilerplate` (describe the file you want).
@@ -138,9 +144,11 @@ An MCP server runs as the service user, and Claude asks before using each tool u
 
 ### Look and feel
 
-Archon Tech branding throughout: dark theme with the Archon palette, banner and app icon, installable as a PWA.
+Archon Tech branding throughout: dark theme with the Archon palette, banner and app icon, installable as a PWA. *Settings → About* shows the version, what is inside and links to this project.
 
 ![Files](docs/images/files.webp)
+
+![Settings, About](docs/images/about.webp)
 
 ## Quick start
 
