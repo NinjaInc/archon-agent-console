@@ -6,6 +6,7 @@ import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 import WorkspaceConnectionStatus from '@/modules/project-workspace/WorkspaceConnectionStatus';
+import WorkspaceMoreMenu from '@/modules/project-workspace/WorkspaceMoreMenu';
 import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
 
@@ -16,6 +17,9 @@ type WorkspaceHeaderProps = {
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
+  shouldShowProdTab: boolean;
+  shouldShowLocalTab?: boolean;
+  localStatus?: 'unknown' | 'online' | 'offline';
   isMobile: boolean;
   onMenuClick: () => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. */
@@ -30,6 +34,9 @@ export default function WorkspaceHeader({
   selectedSession,
   shouldShowTasksTab,
   shouldShowBrowserTab,
+  shouldShowProdTab,
+  shouldShowLocalTab,
+  localStatus,
   isMobile,
   onMenuClick,
   onRenameSession,
@@ -110,8 +117,8 @@ export default function WorkspaceHeader({
           <WorkspaceConnectionStatus />
         </div>
 
-        <div className="-mx-3 min-w-0 sm:mx-0 sm:flex-1">
-          <div className="relative ml-auto w-fit max-w-full">
+        <div className="-mx-3 flex min-w-0 items-center justify-end gap-2 sm:mx-0 sm:flex-1">
+          <div className="relative w-fit min-w-0 max-w-full">
             {canScrollLeft && (
               <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background via-background/90 to-transparent" />
             )}
@@ -126,8 +133,10 @@ export default function WorkspaceHeader({
               <WorkspaceTabs
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
-                shouldShowTasksTab={shouldShowTasksTab}
                 shouldShowBrowserTab={shouldShowBrowserTab}
+                shouldShowProdTab={shouldShowProdTab}
+                shouldShowLocalTab={shouldShowLocalTab}
+                localStatus={localStatus}
               />
             </div>
             {canScrollRight && (
@@ -154,6 +163,9 @@ export default function WorkspaceHeader({
                 <ChevronRight className="h-4 w-4" />
               </button>
             )}
+          </div>
+          <div className="flex-shrink-0 pr-3 sm:pr-0">
+            <WorkspaceMoreMenu activeTab={activeTab} setActiveTab={setActiveTab} shouldShowTasksTab={shouldShowTasksTab} />
           </div>
         </div>
       </div>

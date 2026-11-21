@@ -30,6 +30,7 @@ type ShellProps = {
   selectedSession?: ProjectSession | null;
   initialCommand?: string | null;
   isPlainShell?: boolean;
+  agentOverride?: string | null;
   onProcessComplete?: ((exitCode: number) => void) | null;
   minimal?: boolean;
   autoConnect?: boolean;
@@ -42,6 +43,7 @@ export default function Shell({
   selectedSession = null,
   initialCommand = null,
   isPlainShell = false,
+  agentOverride = null,
   onProcessComplete = null,
   minimal = false,
   autoConnect = false,
@@ -75,6 +77,7 @@ export default function Shell({
     selectedSession,
     initialCommand,
     isPlainShell,
+    agentOverride,
     bypassPermissions,
     minimal,
     autoConnect,
@@ -218,7 +221,7 @@ export default function Shell({
 
   const shellProvider = isPlainShell
     ? 'plain-shell'
-    : selectedSession?.__provider || readSelectedProvider();
+    : agentOverride || selectedSession?.__provider || readSelectedProvider();
 
   const handleToggleBypassPermissions = useCallback(() => {
     setBypassPermissions((enabled) => !enabled);

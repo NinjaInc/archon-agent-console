@@ -1,4 +1,4 @@
-// Service Worker for CloudCLI PWA
+// Service Worker for Archon Agent Console PWA
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
 const CACHE_NAME = 'claude-ui-v2';
@@ -79,20 +79,22 @@ self.addEventListener('push', event => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: 'CloudCLI', body: event.data.text() };
+    payload = { title: 'Archon Agent Console', body: event.data.text() };
   }
 
   const options = {
     body: payload.body || '',
     icon: '/logo-256.png',
-    badge: '/logo-128.png',
+    // Android draws the badge in the status bar from its alpha channel only, so it must be a white-on-clear glyph.
+    badge: '/badge-96.png',
+    vibrate: [120, 60, 120],
     data: payload.data || {},
     tag: payload.data?.tag || `${payload.data?.sessionId || 'global'}:${payload.data?.code || 'default'}`,
     renotify: true
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'CloudCLI', options)
+    self.registration.showNotification(payload.title || 'Archon Agent Console', options)
   );
 });
 
@@ -113,6 +115,7 @@ self.addEventListener('notificationclick', event => {
             type: 'notification:navigate',
             sessionId: sessionId || null,
             provider,
+            tab: event.notification.data?.tab || null,
             urlPath
           });
           return;

@@ -377,20 +377,22 @@ const renameSessionInProject = (project: Project, sessionIdToRename: string, sum
   return changed ? { ...project, sessions: nextSessions } : project;
 };
 
-const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'browser']);
+const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'agy', 'prod', 'agy-chat', 'local', 'git', 'tasks', 'browser']);
 
 const isValidTab = (tab: string): tab is AppTab => {
   return VALID_TABS.has(tab) || tab.startsWith('plugin:');
 };
 
+// The tab is remembered for the life of the browser tab (so a reload stays put), but a fresh visit or app
+// launch always opens on the conversation (Chat), which is the default view.
 const readPersistedTab = (): AppTab => {
   try {
-    const stored = localStorage.getItem('activeTab');
+    const stored = sessionStorage.getItem('activeTab');
     if (stored && isValidTab(stored)) {
       return stored as AppTab;
     }
   } catch {
-    // localStorage unavailable
+    // sessionStorage unavailable
   }
   return 'chat';
 };
@@ -410,7 +412,7 @@ export function useProjectsState({
 
   useEffect(() => {
     try {
-      localStorage.setItem('activeTab', activeTab);
+      sessionStorage.setItem('activeTab', activeTab);
     } catch {
       // Silently ignore storage errors
     }
@@ -1042,6 +1044,8 @@ export function useProjectsState({
       setSelectedProject(project);
       setSelectedSession(null);
       navigate('/');
+      // Picking a project leaves the full-page GitHub repositories view.
+      setActiveTab((current) => (current === 'github' || current === 'launcher' || current === 'skills' ? 'chat' : current));
 
       if (isMobile) {
         setSidebarOpen(false);
@@ -1055,7 +1059,7 @@ export function useProjectsState({
       clearSessionAttention(session.id);
       setSelectedSession(session);
 
-      if (activeTab === 'tasks' || activeTab === 'browser') {
+      if (activeTab === 'tasks' || activeTab === 'browser' || activeTab === 'github' || activeTab === 'launcher' || activeTab === 'skills') {
         setActiveTab('chat');
       }
 
@@ -1286,8 +1290,11 @@ export function useProjectsState({
       settingsInitialTab,
       onCloseSettings: () => setShowSettings(false),
       isMobile,
+      activeTab,
+      onSelectTab: setActiveTab,
     }),
     [
+      activeTab,
       attentionSessionIds,
       handleNewSession,
       handleProjectDelete,

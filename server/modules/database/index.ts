@@ -19,6 +19,11 @@ export type {
   SessionDraftRecord,
 } from '@/modules/database/repositories/session-drafts.db.js';
 export { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
+// authStoreDb: used by the Auth module to persist passkeys, login sessions and bootstrap tokens.
+export { authStoreDb } from '@/modules/database/repositories/auth-store.js';
+// agyChatDb: used by the agy-chat module to persist Antigravity chats and their messages.
+export { agyChatDb } from '@/modules/database/repositories/agy-chat-store.js';
+export type { PasskeyRow, AuthSessionRow } from '@/modules/database/repositories/auth-store.js';
 export { userDb } from '@/modules/database/repositories/users.js';
 // userPreferencesDb: used by the User module to persist the settings that used to live in browser localStorage.
 export { userPreferencesDb } from '@/modules/database/repositories/user-preferences.db.js';

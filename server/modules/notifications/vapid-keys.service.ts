@@ -27,8 +27,12 @@ function getPublicKey() {
 
 function configureWebPush() {
   const keys = ensureVapidKeys();
+  // The VAPID subject tells push services who is sending. Use VAPID_SUBJECT, else this console's own https
+  // address (APP_ORIGIN); a made-up mailto: on a .local domain is rejected by some push services.
+  const origin = process.env.APP_ORIGIN || '';
+  const subject = process.env.VAPID_SUBJECT || (/^https:\/\//.test(origin) ? origin : 'mailto:noreply@claudecodeui.local');
   webPush.setVapidDetails(
-    'mailto:noreply@claudecodeui.local',
+    subject,
     keys.publicKey,
     keys.privateKey
   );

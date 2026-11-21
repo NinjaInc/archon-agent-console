@@ -1,156 +1,56 @@
-# Contributing to CloudCLI UI
+# Contributing to Archon Agent Console
 
-Thanks for your interest in contributing to CloudCLI UI! Before you start, please take a moment to read through this guide.
+Thanks for looking at the code. This is a private-use console that drives Claude Code and Antigravity, so changes are judged first on whether they keep it safe to leave on the internet.
 
-## Before You Start
-
-- **Search first.** Check [existing issues](https://github.com/siteboon/claudecodeui/issues) and [pull requests](https://github.com/siteboon/claudecodeui/pulls) to avoid duplicating work.
-- **Discuss first** for new features. Open an [issue](https://github.com/siteboon/claudecodeui/issues/new) to discuss your idea before investing time in implementation. We may already have plans or opinions on how it should work.
-- **Bug fixes are always welcome.** If you spot a bug, feel free to open a PR directly.
-
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) 22 or later
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured
-
-## Getting Started
-
-1. Fork the repository
-2. Clone your fork:
-   ```bash
-   git clone https://github.com/<your-username>/claudecodeui.git
-   cd claudecodeui
-   ```
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-5. Create a branch for your changes:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
-
-## Project Structure
-
-```
-claudecodeui/
-├── src/              # React frontend (Vite + Tailwind)
-│   ├── components/   # UI components
-│   ├── contexts/     # React context providers
-│   ├── hooks/        # Custom React hooks
-│   ├── i18n/         # Internationalization and translations
-│   ├── lib/          # Shared frontend libraries
-│   ├── types/        # TypeScript type definitions
-│   └── utils/        # Frontend utilities
-├── server/           # Express backend
-│   ├── routes/       # API route handlers
-│   ├── middleware/    # Express middleware
-│   ├── database/     # SQLite database layer
-│   └── tools/        # CLI tool integrations
-├── shared/           # Code shared between client and server
-└── public/           # Static assets, icons, PWA manifest
-```
-
-## Development Workflow
-
-- `npm run dev` — Start both the frontend and backend in development mode
-- `npm run build` — Create a production build
-- `npm run server` — Start only the backend server
-- `npm run client` — Start only the Vite dev server
-
-## Making Changes
-
-### Bug Fixes
-
-- Reference the issue number in your PR if one exists
-- Describe how to reproduce the bug in your PR description
-- Add a screenshot or recording for visual bugs
-
-### New Features
-
-- Keep the scope focused — one feature per PR
-- Include screenshots or recordings for UI changes
-
-### Documentation
-
-- Documentation improvements are always welcome
-- Keep language clear and concise
-
-## Commit Convention
-
-We follow [Conventional Commits](https://conventionalcommits.org/) to generate release notes automatically. Every commit message should follow this format:
-
-```
-<type>(optional scope): <description>
-```
-
-Use imperative, present tense: "add feature" not "added feature" or "adds feature".
-
-### Types
-
-| Type | Description |
-|------|-------------|
-| `feat` | A new feature |
-| `fix` | A bug fix |
-| `perf` | A performance improvement |
-| `refactor` | Code change that neither fixes a bug nor adds a feature |
-| `docs` | Documentation only |
-| `style` | CSS, formatting, visual changes |
-| `chore` | Maintenance, dependencies, config |
-| `ci` | CI/CD pipeline changes |
-| `test` | Adding or updating tests |
-| `build` | Build system changes |
-
-### Examples
+## Set up
 
 ```bash
-feat: add conversation search
-feat(i18n): add Japanese language support
-fix: redirect unauthenticated users to login
-fix(editor): syntax highlighting for .env files
-perf: lazy load code editor component
-refactor(chat): extract message list component
-docs: update API configuration guide
+git clone https://github.com/NinjaInc/archon-agent-console && cd archon-agent-console
+npm ci
+npm run dev          # Vite + the server with hot reload
 ```
 
-### Breaking Changes
+Node 22 or newer is required. Passkeys need https or `localhost`, so for local work run with `APP_ORIGIN=http://localhost:3001 RP_ID=localhost` (see the README).
 
-Add `!` after the type or include `BREAKING CHANGE:` in the commit footer:
+## Before you open a pull request
 
 ```bash
-feat!: redesign settings page layout
+npm run typecheck && npm run lint
+npm test                # server tests (node:test)
+npm run test:client     # client tests (vitest)
+npm run test:scripts    # the helper scripts
 ```
 
-## Pull Requests
+All of them must pass. New behaviour needs a test, and security-relevant behaviour (paths, auth, spawned processes, anything that writes outside a project) needs a test that tries to break it.
 
-- Give your PR a clear, descriptive title following the commit convention above
-- Fill in the PR description with what changed and why
-- Link any related issues
-- Include screenshots for UI changes
-- Make sure the build passes (`npm run build`)
-- Keep PRs focused — avoid unrelated changes
+## How the code is organised
 
-## Releases
+- Server code lives in `server/modules/<feature>/` as a service (logic), routes (thin), a module (wiring) and `tests/`. Other modules are imported only through their `index.ts`.
+- Client code lives in `src/modules/<feature>/` with the same barrel rule.
+- The full rules are in `.agents/skills/backend-module-standards/` and `.agents/skills/frontend-module-standards/`. Lint enforces the import boundaries.
 
-Releases are managed by maintainers using [release-it](https://github.com/release-it/release-it) with the [conventional changelog plugin](https://github.com/release-it/conventional-changelog).
+## Commits
+
+Conventional commits with a lowercase subject, for example `feat(auth): readable setup tokens`. A husky hook runs lint-staged and commitlint, so a bad message is rejected locally.
+
+## Security
+
+Please do not open a public issue for a vulnerability. See [SECURITY.md](SECURITY.md).
+
+## Upstream
+
+This is a fork of [CloudCLI UI](https://github.com/siteboon/claudecodeui). The README explains how to rebase on it and which files usually conflict. Generic fixes that are not specific to this fork are welcome upstream too.
+
+## Optional: add a Co-Authored-By trailer automatically
+
+`scripts/git-hooks/append-coauthor.sh` appends one `Co-Authored-By:` trailer to every commit message, and never twice (amend, rebase and a hand-typed trailer are all safe). The trailer text is read from a file, so no address lives in the repository:
 
 ```bash
-npm run release           # interactive (prompts for version bump)
-npm run release -- patch  # patch release
-npm run release -- minor  # minor release
+mkdir -p ~/.config/archon-agent-console
+printf 'Co-Authored-By: Your Name <you@example.com>\n' > ~/.config/archon-agent-console/coauthor-trailer
+cp scripts/git-hooks/append-coauthor.sh ~/.config/archon-agent-console/
+printf '#!/usr/bin/env sh\nsh ~/.config/archon-agent-console/append-coauthor.sh "$@"\n' > .husky/prepare-commit-msg
+echo '.husky/prepare-commit-msg' >> .git/info/exclude   # keep this local hook out of git
 ```
 
-This automatically:
-- Bumps the version based on commit types (`feat` = minor, `fix` = patch)
-- Generates categorized release notes
-- Updates `CHANGELOG.md`
-- Creates a git tag and GitHub Release
-- Publishes to npm
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the [AGPL-3.0-or-later License](LICENSE), including the additional terms specified in Section 7 of the LICENSE file.
+Husky already routes `prepare-commit-msg` to `.husky/prepare-commit-msg`. Commit messages still have to pass commitlint (lowercase conventional subject, body lines under 100 characters).

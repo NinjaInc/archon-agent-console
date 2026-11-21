@@ -1,11 +1,11 @@
 {
-  "name": "CloudCLI UI",
-  "short_name": "CloudCLI UI",
-  "description": "CloudCLI UI web application",
+  "name": "Archon Agent Console",
+  "short_name": "Archon",
+  "description": "Private, passkey-secured console for Claude Code and Antigravity",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0b0a17",
+  "theme_color": "#0b0a17",
   "orientation": "portrait-primary",
   "scope": "/",
   "icons": [

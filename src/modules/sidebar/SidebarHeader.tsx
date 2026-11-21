@@ -2,10 +2,8 @@ import { FolderPlus, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-r
 import type { TFunction } from 'i18next';
 
 import { Button, Input } from '@/shared/ui';
-import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { SidebarSearchMode } from '@/shared/types';
-import GitHubStarBadge from '@/modules/sidebar/GitHubStarBadge';
 import SidebarModeTabs from '@/modules/sidebar/SidebarModeTabs';
 
 const MOD_KEY =
@@ -31,22 +29,17 @@ type SidebarHeaderProps = {
   t: TFunction;
 };
 
-/** Module-level, not a nested render function, so the wordmark is not remounted on every SidebarHeader render. */
-function LogoBlock({ t }: { t: TFunction }) {
+/** Module-level, not a nested render function, so the banner is not remounted on every SidebarHeader render. */
+function LogoBlock({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
-        <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </div>
-      <h1
-        className="truncate text-sm font-bold tracking-tight text-foreground"
-        style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
-      >
-        {t('app.title')}
-      </h1>
-    </div>
+    <h1 className="m-0 min-w-0">
+      <img
+        src="/brand/banner.webp"
+        alt="Archon Agent Console by Archon Tech"
+        className={`h-auto w-full rounded-xl ${compact ? 'max-w-[11.5rem]' : 'max-w-[16.5rem]'}`}
+        draggable={false}
+      />
+    </h1>
   );
 }
 
@@ -86,20 +79,20 @@ export default function SidebarHeader({
         className="hidden px-3 pb-2 pt-3 md:block"
         style={{}}
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-1">
           {IS_PLATFORM ? (
             <a
               href="https://cloudcli.ai/dashboard"
               className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-80"
               title={t('tooltips.viewEnvironments')}
             >
-              <LogoBlock t={t} />
+              <LogoBlock />
             </a>
           ) : (
-            <LogoBlock t={t} />
+            <LogoBlock />
           )}
 
-          <div className="flex flex-shrink-0 items-center gap-0.5">
+          <div className="flex flex-shrink-0 items-center justify-end gap-0.5">
             <Button
               variant="ghost"
               size="sm"
@@ -134,8 +127,6 @@ export default function SidebarHeader({
             </Button>
           </div>
         </div>
-
-        <GitHubStarBadge />
 
         {/* Search bar */}
         {showSearchTools && (
@@ -194,10 +185,10 @@ export default function SidebarHeader({
               className="flex min-w-0 items-center gap-2.5 transition-opacity active:opacity-70"
               title={t('tooltips.viewEnvironments')}
             >
-              <LogoBlock t={t} />
+              <LogoBlock compact />
             </a>
           ) : (
-            <LogoBlock t={t} />
+            <LogoBlock compact />
           )}
 
           <div className="flex flex-shrink-0 gap-1.5">

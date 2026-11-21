@@ -184,7 +184,79 @@ export function errorMessage(error: unknown): string {
  * This is resolved from `WORKSPACES_ROOT` when configured; otherwise it falls
  * back to the current user's home directory.
  */
-export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
+function resolveWorkspaceRoots(): string[] {
+  // PROJECTS_ROOTS (comma separated) is the Archon setting; WORKSPACES_ROOT is the upstream name.
+  const configured = (process.env.PROJECTS_ROOTS || process.env.WORKSPACES_ROOT || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => (entry.startsWith('~') ? path.join(os.homedir(), entry.slice(1)) : path.resolve(entry)));
+  if (configured.length > 0) {
+    return configured;
+  }
+  // Default to the folders a dev server keeps work in rather than the whole home directory
+  // (which holds ~/.ssh, ~/.config/gh and other credentials).
+  const defaults = ['projects', 'src', 'drive'].map((name) => path.join(os.homedir(), name)).filter((entry) => fs.existsSync(entry));
+  return defaults.length > 0 ? defaults : [os.homedir()];
+}
+
+/**
+ * Every folder the file explorer, shell working directory and new-project flow may use.
+ * Always contains at least one entry; paths are checked against these after symlink resolution.
+ */
+export const WORKSPACE_ROOTS = resolveWorkspaceRoots();
+
+/**
+ * Credential folders and files that stay off-limits even when they sit inside an allowed root,
+ * for example when the home directory itself is a root. Entries are relative to the home directory
+ * unless absolute. Override the whole list with PROJECTS_DENY (comma separated).
+ */
+const DEFAULT_DENIED_NAMES = [
+  // Keys, cloud and registry logins
+  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config', '.npm', '.npmrc', '.pypirc', '.netrc',
+  '.git-credentials', '.vault-token', '.password-store', '.terraform.d', '.pki', '.mozilla',
+  // The agents' own logins, MCP definitions and this app's database
+  '.cloudcli', '.claude', '.claude.json', '.claude-code-ui', '.gemini', '.codex', '.cursor',
+  // Files that run commands at login or on git operations (writing them is code execution)
+  '.bashrc', '.bash_profile', '.bash_logout', '.profile', '.zshrc', '.zprofile', '.gitconfig', '.git', '.bash_history',
+  // Tool installs, caches and per-app logins (also holds this server's log with one-time setup tokens)
+  '.local', '.cache',
+];
+
+function resolveDeniedPaths(): string[] {
+  const configured = process.env.PROJECTS_DENY;
+  const names = configured === undefined
+    ? DEFAULT_DENIED_NAMES
+    : configured.split(',').map((entry) => entry.trim()).filter(Boolean);
+  const resolved = new Set<string>();
+  for (const name of names) {
+    const lexical = path.isAbsolute(name) ? path.resolve(name) : path.join(os.homedir(), name);
+    resolved.add(lexical);
+    try {
+      resolved.add(fs.realpathSync(lexical));
+    } catch {
+      // Not present on this machine; the lexical form still blocks it if it appears later.
+    }
+  }
+  return [...resolved];
+}
+
+/**
+ * Folders and files the file explorer, shell working directory and project creation refuse,
+ * checked after symlink resolution and in addition to the allowed roots (see PROJECTS_DENY).
+ */
+export const DENIED_PATHS = resolveDeniedPaths();
+
+/**
+ * True when `candidate` is one of the denied paths or lives under one. Compare real (symlink
+ * resolved) paths wherever possible so a link cannot be used to reach a denied folder.
+ */
+export function isDeniedPath(candidate: string, denied: readonly string[] = DENIED_PATHS): boolean {
+  return denied.some((entry) => candidate === entry || candidate.startsWith(`${entry}${path.sep}`));
+}
+
+/** The first workspace root: where browsing starts and where `~` points in the folder picker. */
+export const WORKSPACES_ROOT = WORKSPACE_ROOTS[0];
 
 /**
  * System-critical paths that must never be used as workspace roots.
@@ -258,7 +330,7 @@ const READ_ONLY_ROOTS = [...new Set([
  * its own, so one that does not exist on this machine — `/tmp` on Windows — is
  * skipped and the roots after it are still checked.
  */
-export async function resolvePathUnderRoots(targetPath: string, roots: string[]): Promise<string | null> {
+export async function resolvePathUnderRoots(targetPath: string, roots: string[], denied: readonly string[] = []): Promise<string | null> {
   const normalizedTarget = normalizeProjectPath(targetPath);
   if (!normalizedTarget || !path.isAbsolute(normalizedTarget)) {
     return null;
@@ -281,7 +353,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
     }
 
     if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
-      return resolvedPath;
+      return isDeniedPath(resolvedPath, denied) ? null : resolvedPath;
     }
   }
 
@@ -424,15 +496,24 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    const resolvedWorkspaceRoots: string[] = [];
+    for (const workspaceRoot of WORKSPACE_ROOTS) {
+      try {
+        resolvedWorkspaceRoots.push(normalizeProjectPath(await realpath(workspaceRoot)));
+      } catch {
+        // A configured root that does not exist (yet) cannot contain anything.
+      }
+    }
+    const isInsideWorkspaceRoots = (candidate: string) =>
+      resolvedWorkspaceRoots.some((root) => candidate === root || candidate.startsWith(`${root}${path.sep}`));
+    if (!isInsideWorkspaceRoots(resolvedPath)) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
+        error: `Workspace path must be within the allowed workspace roots: ${WORKSPACE_ROOTS.join(', ')}`,
       };
+    }
+    if (isDeniedPath(resolvedPath)) {
+      return { valid: false, error: 'Workspace path is a protected credentials folder' };
     }
 
     try {
@@ -442,10 +523,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        if (!isInsideWorkspaceRoots(normalizeProjectPath(realSymlinkPath))) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',

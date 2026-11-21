@@ -181,7 +181,11 @@ function getMcpCommand(): { command: string; args: string[] } {
 
 function getMcpApiUrl(): string {
   const port = process.env.SERVER_PORT || process.env.PORT || '3001';
-  return `http://127.0.0.1:${port}/api/browser-use-mcp`;
+  // The server listens only on HOST (loopback by default, or one LAN address), so the bridge must call that
+  // address: nothing listens on 127.0.0.1 when HOST is a LAN IP, and a stray local listener there must not
+  // receive the bridge token. Wildcard and hostname values never reach here (see server/shared/bind-host.ts).
+  const host = (process.env.HOST || '127.0.0.1').includes(':') ? `[${process.env.HOST}]` : process.env.HOST || '127.0.0.1';
+  return `http://${host}:${port}/api/browser-use-mcp`;
 }
 
 async function removeMcpServerFromAllProviders(name: string) {
@@ -360,6 +364,23 @@ function normalizeUrl(rawUrl: string): string {
     throw new Error('Only http and https URLs are supported.');
   }
 
+  return parsed.toString();
+}
+
+/** Hosts that mean "a server on this machine or LAN": a bare `localhost:5173` should open over http, not https. */
+const PRIVATE_HOST_START = /^(localhost|127\.|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i;
+
+/** Normalises what a person types into the Preview box: scheme optional, no embedded credentials. */
+export function normalizePreviewUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (trimmed.length > 2048) {
+    throw new Error('That URL is too long.');
+  }
+  const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed) ? trimmed : `${PRIVATE_HOST_START.test(trimmed) ? 'http' : 'https'}://${trimmed}`;
+  const parsed = new URL(normalizeUrl(withScheme));
+  if (parsed.username || parsed.password) {
+    throw new Error('Put credentials in the page, not in the URL.');
+  }
   return parsed.toString();
 }
 
@@ -631,6 +652,27 @@ export const browserUseService = {
     handles.set(session.id, { browser, context, page });
     await captureSession(session, page);
     return publicSession(session);
+  },
+
+  /**
+   * Opens a URL in the server-side browser so the person can watch and click it in the Browser tab.
+   * Reuses the newest ready session (so previewing a server again keeps one view), else starts one.
+   */
+  async previewUrl(rawUrl: string) {
+    const url = normalizePreviewUrl(rawUrl);
+    const settings = readSettings();
+    if (!settings.enabled) {
+      throw new Error('Browser agent tools are disabled. Turn the Browser on in Settings first.');
+    }
+    await expireStaleSessions();
+    const existing = [...sessions.values()]
+      .filter((session) => session.ownerId === AGENT_OWNER_ID && session.status === 'ready')
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    const session = existing ? publicSession(existing) : await this.createAgentSession();
+    if (session.status !== 'ready') {
+      return session; // runtime not installed yet: the session carries the setup message
+    }
+    return this.agentNavigate(session.id, url);
   },
 
   async listAgentSessions() {

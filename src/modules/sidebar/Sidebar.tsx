@@ -8,7 +8,7 @@ import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarControll
 import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
 import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
-import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
+import type { AppTab, LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
@@ -34,6 +34,10 @@ type SidebarProps = {
   settingsInitialTab: string;
   onCloseSettings: () => void;
   isMobile: boolean;
+  /** The workspace tab currently shown, so the footer tools can highlight their own. */
+  activeTab: AppTab;
+  /** Switches the workspace tab; the footer tools (plugins, Tasks) use it. */
+  onSelectTab: (tab: AppTab) => void;
 };
 
 type TaskMasterSidebarContext = {
@@ -61,12 +65,14 @@ function Sidebar({
   settingsInitialTab,
   onCloseSettings,
   isMobile,
+  activeTab,
+  onSelectTab,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
-    'claudecodeui',
+    'NinjaInc',
+    'archon-agent-console',
   );
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
@@ -349,6 +355,8 @@ function Sidebar({
             currentVersion={currentVersion}
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
+            activeTab={activeTab}
+            onSelectTab={onSelectTab}
             projectListProps={projectListProps}
             t={t}
           />

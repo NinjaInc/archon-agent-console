@@ -1,0 +1,27 @@
+# cloudflared tunnel for Archon Agent Console - author: Josh Neufield (Archon Tech)
+#
+# Routes https://<HOSTNAME> -> http://127.0.0.1:3001 (websockets included) using the config in
+# /etc/cloudflared/archon.yml. Create the tunnel and credentials first (see README, "Cloudflare setup").
+[Unit]
+Description=cloudflared tunnel for Archon Agent Console
+After=network-online.target archon-agent-console.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloudflared
+Group=cloudflared
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config /etc/cloudflared/archon.yml tunnel run
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

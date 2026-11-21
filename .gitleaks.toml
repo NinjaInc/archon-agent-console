@@ -1,0 +1,26 @@
+# gitleaks configuration for this repository. Author: Josh Neufield (Archon Tech)
+#
+# Everything the default rules find is still reported EXCEPT the specific files below, which hold deliberately fake
+# values (the secret guard's own patterns and test fixtures) or are build output and translated UI labels such as
+# "API key". The list is kept narrow on purpose: a real secret in any other file, including any other test, still fails.
+title = "Archon Agent Console"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Build output, translated labels, and known fake fixtures"
+paths = [
+  '''^dist/''',
+  '''^dist-server/''',
+  '''^src/modules/i18n/locales/''',
+  '''^server/modules/ollama/ollama\.secret-guard\.ts$''',
+  '''^server/modules/ollama/tests/ollama\.safety\.test\.ts$''',
+  '''^server/modules/settings/tests/settings\.service\.test\.ts$''',
+  '''^src/modules/settings/tests/notificationWebhookCard\.test\.tsx$''',
+]
+
+[[allowlists]]
+description = "A character set for readable setup tokens, not a credential"
+regexTarget = "line"
+regexes = ['''READABLE_TOKEN_ALPHABET''']

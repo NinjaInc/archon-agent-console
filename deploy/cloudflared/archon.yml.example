@@ -1,0 +1,13 @@
+# /etc/cloudflared/archon.yml - author: Josh Neufield (Archon Tech)
+# Copy to /etc/cloudflared/archon.yml and replace the <placeholders>.
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json   # mode 0600, owner cloudflared; never commit
+
+ingress:
+  # Websockets (/ws and /shell) work through cloudflared with no extra setting.
+  - hostname: <HOSTNAME>            # e.g. console.example.com
+    service: http://127.0.0.1:3001
+    originRequest:
+      # The app is addressed as <HOSTNAME> by the browser; keep the Host header as-is.
+      noTLSVerify: false
+  - service: http_status:404        # required catch-all

@@ -62,7 +62,8 @@ function createFakeFileSystem(
     openDirectory: () => ({
       [Symbol.asyncIterator]: () => ({ next: unexpectedOperation }),
     }),
-    realpath: unexpectedOperation,
+    // Identity: the fakes use plain, symlink-free paths. Real resolution is covered in file-tree.path-safety.test.ts.
+    realpath: async (candidatePath: string) => candidatePath,
     readTextFile: unexpectedOperation,
     writeTextFile: unexpectedOperation,
     makeDirectory: unexpectedOperation,

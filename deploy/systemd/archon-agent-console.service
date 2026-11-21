@@ -1,0 +1,50 @@
+# Archon Agent Console - author: Josh Neufield (Archon Tech)
+#
+# Runs the console as the dedicated, unprivileged `archon` user, bound to 127.0.0.1 only.
+# Install with deploy/install.sh (review it first). Secrets live in /etc/archon-agent-console/env
+# (mode 0640 root:archon), never in this file or the repository.
+[Unit]
+Description=Archon Agent Console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=archon
+Group=archon
+WorkingDirectory=/opt/archon-agent-console
+EnvironmentFile=/etc/archon-agent-console/env
+# Node comes from the system or mise; point this at the real binary on the host.
+ExecStart=/usr/bin/node dist-server/server/index.js
+Restart=on-failure
+RestartSec=3
+# The first-run bootstrap token is printed to stdout; keep it in an owner-only log (rotated by logrotate).
+StandardOutput=append:/var/log/archon-agent-console/server.log
+StandardError=append:/var/log/archon-agent-console/server.log
+UMask=0077
+
+# --- hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Writable: the app's own data, its logs, the agents' home and the projects it may edit.
+ReadWritePaths=/var/lib/archon-agent-console /var/log/archon-agent-console /srv/archon
+# (V8 needs writable+executable memory, so MemoryDenyWriteExecute is intentionally not set.)
+
+[Install]
+WantedBy=multi-user.target

@@ -157,16 +157,18 @@ export function createCliApplication() {
   }
 }
 
-test('CLI bootstrap selects Platform authentication and cloud runtime from .env', async () => {
+// Archon fork: Platform mode still selects the cloud runtime, but it must never bypass
+// authentication (the upstream bypass uses the first DB user). The server also refuses to start in it.
+test('CLI bootstrap selects the cloud runtime from .env without bypassing authentication', async () => {
   const result = await runCliBootstrapFixture(true);
 
   assert.deepEqual(result, {
     command: 'status',
     environmentFileReads: 0,
     mode: 'true',
-    authNextCalled: true,
-    authStatus: 200,
-    authenticatedUsername: 'bootstrap-user',
+    authNextCalled: false,
+    authStatus: 401,
+    authenticatedUsername: null,
     runtime: 'cloud',
   });
 });

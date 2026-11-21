@@ -5,11 +5,12 @@ import { cn } from '@/shared/utils';
 
 // Keep visual variants centralized so all button usages stay consistent.
 export const buttonVariants = cva(
-  'inline-flex touch-manipulation items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex touch-manipulation items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground shadow hover:bg-primary/90 active:bg-primary/80',
+        default:
+          'bg-primary text-primary-foreground shadow-[0_8px_30px_-10px_hsl(var(--primary))] hover:bg-primary/90 active:bg-primary/80',
         destructive:
           'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/80',
         outline:
@@ -20,8 +21,8 @@ export const buttonVariants = cva(
       },
       size: {
         default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3 text-sm',
-        lg: 'h-11 rounded-md px-8',
+        sm: 'h-9 px-3 text-sm',
+        lg: 'h-11 px-8',
         icon: 'h-10 w-10',
       },
     },

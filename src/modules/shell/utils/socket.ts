@@ -1,5 +1,4 @@
 import { IS_PLATFORM } from '@/shared/utils';
-import { getStoredAuthToken } from '@/shared/authToken';
 
 type ShellInitMessage = {
   type: 'init';
@@ -49,13 +48,8 @@ export function getShellWebSocketUrl(): string | null {
     return `${protocol}//${window.location.host}/shell`;
   }
 
-  const token = getStoredAuthToken();
-  if (!token) {
-    console.error('No authentication token found for Shell WebSocket connection');
-    return null;
-  }
-
-  return `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}`;
+  // The browser attaches the HttpOnly session cookie to the upgrade request itself.
+  return `${protocol}//${window.location.host}/shell`;
 }
 
 export function parseShellMessage(payload: string): ShellIncomingMessage | null {

@@ -1,163 +1,75 @@
-// @ts-nocheck -- JWT request augmentation is narrowed by Auth route contracts.
-import jwt from 'jsonwebtoken';
+import type { IncomingMessage } from 'node:http';
 
-import { IS_PLATFORM } from '@/shared/utils.js';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
-import { userDb, appConfigDb } from '../database/index.js';
+import type { AuthenticatedPrincipal, createAuthService } from './auth.service.js';
 
-// Use env var if set, otherwise auto-generate a unique secret per installation
-const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+/** `__Host-` pins the cookie to this exact host, requires Secure and Path=/, and forbids a Domain attribute. */
+export const SESSION_COOKIE_NAME = '__Host-archon_session';
 
-// Optional API key middleware
-const validateApiKey = (req, res, next) => {
-  // Skip API key validation if not configured
-  if (!process.env.API_KEY) {
-    return next();
+type AuthService = ReturnType<typeof createAuthService>;
+type AuthenticatedRequest = Request & { user?: { id: number; username: string }; passkeyId?: string | null };
+
+// Methods that cannot change state; everything else must come from the app's own origin.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/** Reads one cookie from a raw Cookie header without trusting or evaluating its other values. */
+export function readSessionCookie(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader) {
+    return null;
   }
-  
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey !== process.env.API_KEY) {
-    return res.status(401).json({ error: 'Invalid API key' });
-  }
-  next();
-};
-
-// JWT authentication middleware
-const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
-  if (IS_PLATFORM) {
-    try {
-      const user = userDb.getFirstUser();
-      if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
-      }
-      req.user = user;
-      return next();
-    } catch (error) {
-      console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+  for (const part of cookieHeader.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator > 0 && part.slice(0, separator).trim() === SESSION_COOKIE_NAME) {
+      const value = part.slice(separator + 1).trim();
+      return value || null;
     }
   }
+  return null;
+}
 
-  // Normal OSS JWT validation
-  const authHeader = req.headers['authorization'];
-  let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  // Also check query param for SSE endpoints (EventSource can't set headers)
-  if (!token && req.query.token) {
-    token = req.query.token;
-  }
-
-  if (!token) {
-    res.setHeader('X-Auth-Error', 'invalid-token');
-    return res.status(401).json({
-      error: 'Access denied. No token provided.',
-      code: 'AUTH_TOKEN_INVALID',
-    });
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Verify user still exists and is active
-    const user = userDb.getUserById(decoded.userId);
-    if (!user) {
+/** Builds the middleware set from the auth service. Used by the Auth module composition root. */
+export function createAuthMiddleware(service: AuthService, appOrigin: string) {
+  /** Rejects any request that does not carry a valid, unexpired, unrevoked session cookie. */
+  const authenticateToken: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+    const principal = service.validateSession(readSessionCookie(req.headers.cookie));
+    if (!principal) {
       res.setHeader('X-Auth-Error', 'invalid-token');
-      return res.status(401).json({
-        error: 'Invalid token. User not found.',
-        code: 'AUTH_TOKEN_INVALID',
-      });
+      res.status(401).json({ error: 'Authentication required.', code: 'AUTH_TOKEN_INVALID' });
+      return;
     }
-
-    // Auto-refresh: if token is past halfway through its lifetime, issue a new one
-    if (decoded.exp && decoded.iat) {
-      const now = Math.floor(Date.now() / 1000);
-      const halfLife = (decoded.exp - decoded.iat) / 2;
-      if (now > decoded.iat + halfLife) {
-        const newToken = generateToken(user);
-        res.setHeader('X-Refreshed-Token', newToken);
-      }
-    }
-
-    req.user = user;
+    (req as AuthenticatedRequest).user = { id: principal.userId, username: principal.username };
+    (req as AuthenticatedRequest).passkeyId = principal.passkeyId;
     next();
-  } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      res.setHeader('X-Auth-Error', 'session-expired');
-      return res.status(401).json({
-        error: 'Session expired. Please log in again.',
-        code: 'AUTH_TOKEN_EXPIRED',
-      });
-    }
+  };
 
-    console.warn(
-      'Token verification failed:',
-      error instanceof Error ? error.message : String(error),
-    );
-    res.setHeader('X-Auth-Error', 'invalid-token');
-    return res.status(401).json({
-      error: 'Invalid token',
-      code: 'AUTH_TOKEN_INVALID',
-    });
-  }
-};
-
-// Generate JWT token
-const generateToken = (user) => {
-  return jwt.sign(
-    {
-      userId: user.id,
-      username: user.username
-    },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-};
-
-// WebSocket authentication function
-const authenticateWebSocket = (token) => {
-  // Platform mode: bypass token validation, return first user
-  if (IS_PLATFORM) {
-    try {
-      const user = userDb.getFirstUser();
-      if (user) {
-        return { id: user.id, userId: user.id, username: user.username };
+  /** Browsers always send Origin on cross-site writes; require it to match this app for every state-changing /api call. */
+  function enforceOrigin(exemptPrefixes: string[] = []): RequestHandler {
+    return (req, res, next) => {
+      if (SAFE_METHODS.has(req.method) || exemptPrefixes.some((prefix) => req.path.startsWith(prefix))) {
+        next();
+        return;
       }
-      return null;
-    } catch (error) {
-      console.error('Platform mode WebSocket error:', error);
-      return null;
-    }
+      if (req.headers.origin !== appOrigin) {
+        res.status(403).json({ error: 'Cross-origin request rejected.', code: 'ORIGIN_NOT_ALLOWED' });
+        return;
+      }
+      next();
+    };
   }
 
-  // Normal OSS JWT validation
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    // Verify user actually exists in database (matches REST authenticateToken behavior)
-    const user = userDb.getUserById(decoded.userId);
-    if (!user) {
-      return null;
-    }
-    return { userId: user.id, username: user.username };
-  } catch (error) {
-    if (!(error instanceof jwt.TokenExpiredError)) {
-      console.warn(
-        'WebSocket token verification failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-    return null;
-  }
-};
-
-export {
-  validateApiKey,
-  authenticateToken,
-  generateToken,
-  authenticateWebSocket,
-  JWT_SECRET
-};
+  return {
+    authenticateToken,
+    enforceOrigin,
+    isAllowedOrigin: (origin: string | undefined): boolean => origin === appOrigin,
+    /** True while the session behind an open websocket is still valid; does not count as user activity. */
+    isSessionActive(request: IncomingMessage): boolean {
+      return service.validateSession(readSessionCookie(request.headers.cookie), { touch: false }) !== null;
+    },
+    /** WebSocket upgrades authenticate with the same session cookie; returns null when it is missing or invalid. */
+    authenticateWebSocket(request: IncomingMessage): { userId: number; username: string } | null {
+      const principal: AuthenticatedPrincipal | null = service.validateSession(readSessionCookie(request.headers.cookie));
+      return principal ? { userId: principal.userId, username: principal.username } : null;
+    },
+  };
+}

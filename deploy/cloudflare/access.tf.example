@@ -1,0 +1,25 @@
+# Terraform equivalent of access.sh.example - author: Josh Neufield (Archon Tech)
+# Provider: cloudflare/cloudflare v4.x. Token needs "Access: Apps and Policies Edit".
+variable "account_id"  { type = string }
+variable "hostname"    { type = string }   # console.example.com
+variable "owner_email" { type = string }
+
+resource "cloudflare_access_policy" "archon_owner" {
+  account_id = var.account_id
+  name       = "archon-console-owner"
+  decision   = "allow"
+  include { email = [var.owner_email] }
+}
+
+resource "cloudflare_access_application" "archon_console" {
+  account_id                 = var.account_id
+  name                       = "Archon Agent Console"
+  domain                     = var.hostname
+  type                       = "self_hosted"
+  session_duration           = "8h"
+  http_only_cookie_attribute = true
+  same_site_cookie_attribute = "strict"
+  policies                   = [cloudflare_access_policy.archon_owner.id]
+}
+
+output "aud" { value = cloudflare_access_application.archon_console.aud }

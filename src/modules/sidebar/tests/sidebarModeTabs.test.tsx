@@ -55,14 +55,15 @@ test('a wide row shows every tab and no overflow menu', () => {
   assert.ok(screen.getByRole('button', { name: 'Conversations' }));
   assert.ok(screen.getByRole('button', { name: 'Running sessions' }));
   assert.ok(screen.getByRole('button', { name: 'Archive only' }));
-  assert.equal(screen.queryByRole('button', { name: 'More' }), null);
+  assert.ok(screen.queryByRole('button', { name: 'More' }) === null);
 });
 
 test('a narrow row moves the tabs that no longer fit into the dropdown', () => {
   const changes = renderTabs(220, 'projects');
 
   assert.ok(screen.getByRole('button', { name: 'Projects' }));
-  assert.equal(screen.queryByRole('button', { name: 'Conversations' }), null);
+  // Compared as a boolean: a failing assert.equal on a DOM node makes Node deep-inspect the whole React tree.
+  assert.ok(screen.queryByRole('button', { name: 'Conversations' }) === null);
 
   fireEvent.click(screen.getByRole('button', { name: 'More' }));
   assert.ok(screen.getByRole('menuitem', { name: 'Running sessions' }));
@@ -76,9 +77,19 @@ test('the section on screen keeps its place in the row', () => {
   renderTabs(220, 'archived');
 
   // Archive is the last tab and the first to be dropped on width alone, but it
-  // is the open section, so the strip has to keep showing it as pressed.
+  // is the open section, so the strip has to keep showing it as pressed. Tabs are kept
+  // from the left (Conversations first), so it is Projects that no longer fits beside it.
   const archive = screen.getByRole('button', { name: 'Archive only' });
   assert.equal(archive.getAttribute('aria-pressed'), 'true');
-  assert.equal(screen.queryByRole('button', { name: 'Conversations' }), null);
+  assert.ok(screen.getByRole('button', { name: 'Conversations' }));
+  assert.ok(screen.queryByRole('button', { name: 'Projects' }) === null);
   assert.ok(screen.getByRole('button', { name: 'More' }));
+});
+
+test('Conversations is the first tab and Projects the second', () => {
+  renderTabs(400, 'conversations');
+
+  const labelled = screen.getAllByRole('button').map((button) => button.textContent?.trim()).filter(Boolean);
+  assert.deepEqual(labelled.slice(0, 2), ['Conversations', 'Projects']);
+  assert.equal(screen.getByRole('button', { name: 'Conversations' }).getAttribute('aria-pressed'), 'true');
 });

@@ -9,7 +9,16 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import {
+    AppError,
+    findApplicationRoot,
+    getModuleDirectory,
+    IS_PLATFORM,
+    resolvePathUnderRoots,
+    terminalTextStyles,
+    DENIED_PATHS,
+    WORKSPACE_ROOTS,
+} from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -25,7 +34,11 @@ import {
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
-    validateApiKey,
+    authConfig,
+    enforceOrigin,
+    isAllowedOrigin,
+    isSessionActive,
+    prepareAuthAtStartup,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
@@ -50,12 +63,20 @@ import {
 } from './modules/scheduled-messages/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
+import { agyRoutes, getAgyLaunchEnvironment } from './modules/agy/index.js';
+import { getProdClaudeLaunch, prodClaudeRoutes } from './modules/prod-claude/index.js';
+import { githubReposRoutes } from './modules/github-repos/index.js';
+import { skillsImportRoutes } from './modules/skills-import/index.js';
+import { agyChatRoutes } from './modules/agy-chat/index.js';
+import { ollamaRoutes } from './modules/ollama/index.js';
+import { cfAccessGate, isCfAccessRequired, verifyCfAccessUpgrade } from './modules/cf-access/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
+import { evaluateBindHost } from './shared/bind-host.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -106,13 +127,20 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 
 createWebSocketServer(server, {
     verifyClient: {
-        isPlatform: IS_PLATFORM,
+        isAllowedOrigin,
+        isSessionActive,
         authenticateWebSocket,
+        verifyEdgeAccess: verifyCfAccessUpgrade,
     },
     chat: {
         runtime: providerRuntimeService,
     },
     shell: {
+        // Terminals may only start inside the configured projects roots.
+        resolveAllowedProjectPath: (candidate) => resolvePathUnderRoots(candidate, WORKSPACE_ROOTS, DENIED_PATHS),
+        getProdClaudeLaunch,
+        getAgentEnvironment: async (provider) =>
+            provider === 'agy' ? getAgyLaunchEnvironment() : {},
         resolveProviderSessionId: (sessionId, provider) => {
             const dbSession = sessionsDb.getSessionById(sessionId);
             if (dbSession) {
@@ -125,22 +153,62 @@ createWebSocketServer(server, {
     getPluginPort,
 });
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
-app.use(express.json({
-    limit: '50mb',
-    type: (req) => {
-        // Skip multipart/form-data requests (for file uploads like images)
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('multipart/form-data')) {
-            return false;
-        }
-        return contentType.includes('json');
-    }
-}));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Cloudflare Access is the outer door: when CF_ACCESS_REQUIRED=true nothing (not even static files)
+// is served without a valid, signed Cf-Access-Jwt-Assertion. Passkeys remain the inner door.
+app.use(cfAccessGate);
 
-// Public health check endpoint (no authentication required)
+// Passkey-only deployment: the platform auth bypass must never be active.
+if (IS_PLATFORM) {
+    console.error('[FATAL] Platform mode disables authentication and cannot be used with passkey login.');
+    process.exit(1);
+}
+
+// Behind cloudflared the TCP peer is the connector, so trust only the proxies named here
+// (default: loopback) and X-Forwarded-For - the real client IP, used for rate limiting - cannot be
+// spoofed by direct clients. When the connector is another host on the LAN, name it in TRUST_PROXY,
+// e.g. TRUST_PROXY=loopback,192.168.1.0/24, or every internet visitor shares one rate-limit bucket.
+const TRUST_PROXY_ENTRY = /^(loopback|linklocal|uniquelocal|[0-9a-fA-F:.]+(\/\d{1,3})?)$/;
+const trustedProxies = (process.env.TRUST_PROXY || 'loopback').split(',').map((entry) => entry.trim()).filter(Boolean);
+if (trustedProxies.length === 0 || !trustedProxies.every((entry) => TRUST_PROXY_ENTRY.test(entry))) {
+    console.error(`[FATAL] TRUST_PROXY must be a comma-separated list of loopback, linklocal, uniquelocal, IPs or CIDRs (got "${process.env.TRUST_PROXY}").`);
+    process.exit(1);
+}
+app.set('trust proxy', trustedProxies);
+app.disable('x-powered-by');
+
+// Same-origin only: the browser app is served from this origin, so CORS is not opened to anyone else.
+app.use(cors({ origin: authConfig.origin, credentials: true, exposedHeaders: ['X-Auth-Error'] }));
+const isJsonRequest = (req: http.IncomingMessage) => {
+    // Skip multipart/form-data requests (for file uploads like images)
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+        return false;
+    }
+    return contentType.includes('json');
+};
+// Large bodies (pasted images, big files) are for signed-in users only: a request without a valid
+// session gets a 100 KB limit, so an anonymous caller cannot make the server parse 50 MB per request.
+const signedInJson = express.json({ limit: '50mb', type: isJsonRequest });
+const anonymousJson = express.json({ limit: '100kb', type: isJsonRequest });
+const signedInForm = express.urlencoded({ limit: '50mb', extended: true });
+const anonymousForm = express.urlencoded({ limit: '100kb', extended: true });
+app.use((req, res, next) => (isSessionActive(req) ? signedInJson : anonymousJson)(req, res, next));
+app.use((req, res, next) => (isSessionActive(req) ? signedInForm : anonymousForm)(req, res, next));
+
+// Minimal liveness probe for systemd/monitoring: no version, paths or other details.
+app.get('/healthz', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ status: 'ok' });
+});
+
+// Health check: anyone gets liveness; the version and install mode go to signed-in users only
+// (the app itself reads them after login to detect a stale server process).
 app.get('/health', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!isSessionActive(req)) {
+        res.json({ status: 'ok' });
+        return;
+    }
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -149,8 +217,9 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Optional API key validation (if configured)
-app.use('/api', validateApiKey);
+// Reject cross-origin state-changing requests. The Browser MCP bridge is called by a local
+// subprocess with its own secret token and has no browser Origin.
+app.use('/api', enforceOrigin(['/browser-use-mcp']));
 
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
@@ -163,6 +232,24 @@ app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
 // Chat attachment upload/serving (global ~/.cloudcli/assets store, protected)
 app.use('/api/assets', authenticateToken, assetsRoutes);
+
+// Antigravity (agy) auth configuration (protected; never returns the key)
+app.use('/api/agy', authenticateToken, agyRoutes);
+
+// Prod Claude: whether to show the terminal that connects to the production host's own Claude Code (protected)
+app.use('/api/prod-claude', authenticateToken, prodClaudeRoutes);
+
+// GitHub repositories (protected; uses the server's own `gh` login, never exposes a token)
+app.use('/api/github-repos', authenticateToken, githubReposRoutes);
+
+// Skills import: installs SKILL.md for Claude Code and Antigravity (protected)
+app.use('/api/skills-import', authenticateToken, skillsImportRoutes);
+
+// Antigravity chat: structured agy turns streamed as SSE (protected)
+app.use('/api/agy-chat', authenticateToken, agyChatRoutes);
+
+// Local (Ollama) model on the LAN: draft-only chat and task shortcuts, no tools (protected)
+app.use('/api/ollama', authenticateToken, ollamaRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
@@ -199,8 +286,8 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
 
-// Agent API Routes (uses API key authentication)
-app.use('/api/agent', agentRoutes);
+// Agent API: requires a signed-in session in addition to its API key (no unauthenticated agent execution).
+app.use('/api/agent', authenticateToken, agentRoutes);
 
 app.use('/api/voice', authenticateToken, voiceRoutes);
 
@@ -280,7 +367,17 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+// Loopback by default. A single private LAN address is allowed only with ALLOW_LAN_BIND=true
+// (see server/shared/bind-host.ts); 0.0.0.0, ::, hostnames and public addresses are refused.
+const HOST = process.env.HOST || '127.0.0.1';
+const bindDecision = evaluateBindHost(HOST);
+if (!bindDecision.ok) {
+    console.error(`[FATAL] ${bindDecision.reason}`);
+    process.exit(1);
+}
+if (bindDecision.lan) {
+    console.warn(`[WARN] Listening on LAN address ${HOST} (ALLOW_LAN_BIND=true). Passkey auth still applies; keep this port firewalled from the internet.`);
+}
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
@@ -334,6 +431,11 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        console.log(`${terminalTextStyles.info('[INFO]')} Cloudflare Access verification: ${isCfAccessRequired ? 'REQUIRED' : 'off (set CF_ACCESS_REQUIRED=true behind the tunnel)'}`);
+
+        // Arms and prints the one-time bootstrap token while no passkey exists.
+        prepareAuthAtStartup();
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

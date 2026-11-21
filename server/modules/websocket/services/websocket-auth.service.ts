@@ -1,59 +1,55 @@
+import type { IncomingMessage } from 'node:http';
+
 import type { VerifyClientCallbackSync } from 'ws';
 
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
-type WebSocketAuthDependencies = {
-  isPlatform: boolean;
-  authenticateWebSocket: (token: string | null) => {
+export type WebSocketAuthDependencies = {
+  /** Polled for open sockets; false closes the socket (revoked passkey, logout, idle or absolute timeout). */
+  isSessionActive: (request: IncomingMessage) => boolean;
+  /** True when the Origin header is exactly this app's origin. */
+  isAllowedOrigin: (origin: string | undefined) => boolean;
+  /** Authenticates the upgrade from its session cookie; null when missing, expired or revoked. */
+  authenticateWebSocket: (request: IncomingMessage) => {
     id?: string | number;
     userId?: string | number;
     username?: string;
     [key: string]: unknown;
   } | null;
+  /** Optional extra gate (Cloudflare Access JWT); returns false to refuse the upgrade. */
+  verifyEdgeAccess?: (request: IncomingMessage) => Promise<boolean> | boolean;
 };
 
 /**
  * Authenticates websocket upgrade requests before the `connection` handler runs.
+ * Order: Origin (blocks cross-site websocket hijacking), then the session cookie.
+ * Every path - /shell, /ws, plugin proxies - goes through here, so none is reachable unauthenticated.
  */
-export function verifyWebSocketClient(
+export async function verifyWebSocketClient(
   info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0],
   dependencies: WebSocketAuthDependencies
-): boolean {
+): Promise<boolean> {
   const request = info.req as AuthenticatedWebSocketRequest;
-  const upgradeUrl = new URL(request.url ?? '/', 'http://localhost');
-  const loggedUrl = new URL(upgradeUrl);
-  if (loggedUrl.searchParams.has('token')) {
-    loggedUrl.searchParams.set('token', 'REDACTED');
+  const upgradePath = new URL(request.url ?? '/', 'http://localhost').pathname;
+
+  // Edge check first: when Cloudflare Access is required, nothing else is evaluated without it.
+  if (dependencies.verifyEdgeAccess && !(await dependencies.verifyEdgeAccess(request))) {
+    console.log('[WARN] WebSocket rejected: Cloudflare Access assertion missing or invalid', upgradePath);
+    return false;
   }
 
-  console.log('WebSocket connection attempt to:', `${loggedUrl.pathname}${loggedUrl.search}`);
-
-  // Platform mode: use the first DB user and skip token checks.
-  if (dependencies.isPlatform) {
-    const user = dependencies.authenticateWebSocket(null);
-    if (!user) {
-      console.log('[WARN] Platform mode: No user found in database');
-      return false;
-    }
-
-    request.user = user;
-    console.log('[OK] Platform mode WebSocket authenticated for user:', user.username);
-    return true;
+  if (!dependencies.isAllowedOrigin(request.headers.origin)) {
+    console.log('[WARN] WebSocket rejected: origin not allowed', upgradePath);
+    return false;
   }
 
-  // OSS mode: read JWT from query string first, then Authorization header.
-  const token =
-    upgradeUrl.searchParams.get('token') ??
-    request.headers.authorization?.split(' ')[1] ??
-    null;
-
-  const user = dependencies.authenticateWebSocket(token);
+  const user = dependencies.authenticateWebSocket(request);
   if (!user) {
-    console.log('[WARN] WebSocket authentication failed');
+    console.log('[WARN] WebSocket authentication failed', upgradePath);
     return false;
   }
 
   request.user = user;
-  console.log('[OK] WebSocket authenticated for user:', user.username);
+  console.log('[OK] WebSocket authenticated for user:', user.username, upgradePath);
   return true;
 }

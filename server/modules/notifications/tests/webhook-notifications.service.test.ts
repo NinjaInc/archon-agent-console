@@ -777,7 +777,9 @@ test('more deliveries than the in-flight cap are dropped and recorded, not queue
       setTimeout(() => res.end('ok'), 100);
     });
     try {
-      const notifier = createWebhookNotificationsService({ ...FAST, maxInFlight: 2 });
+      // A generous attempt timeout: the receiver answers after 100 ms, and on a slow or loaded machine a 300 ms
+      // timeout can expire first. The service then retries, the receiver sees a third hit, and the count is wrong.
+      const notifier = createWebhookNotificationsService({ ...FAST, attemptTimeoutMs: 5000, maxInFlight: 2 });
       notifier.saveConfig(userId, { url: receiver.url, allowHttp: true });
       const send = (sessionId: string) => notifier.sendForEvent({
         userId,

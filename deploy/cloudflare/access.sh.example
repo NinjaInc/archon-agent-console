@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Cloudflare Access application + policy for Archon Agent Console
+# Author: Josh Neufield (Archon Tech)
+#
+# NOT run automatically. Review, fill in the variables, then run it yourself, or use the
+# dashboard steps in the README. Needs an API token with:  Account > Access: Apps and Policies > Edit
+# Keep the token out of shell history:  read -rs CF_API_TOKEN; export CF_API_TOKEN
+set -euo pipefail
+
+: "${CF_API_TOKEN:?export CF_API_TOKEN (scoped: Access Apps and Policies Edit)}"
+: "${CF_ACCOUNT_ID:?your Cloudflare account id}"
+: "${HOSTNAME_FQDN:?e.g. console.example.com}"
+: "${OWNER_EMAIL:?the single email allowed in}"
+API="https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/access"
+
+# 1) Reusable policy: allow exactly one email, require MFA-capable IdP in your Access settings.
+POLICY_ID=$(curl -fsS -X POST "$API/policies" \
+  -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+  --data "$(jq -n --arg email "$OWNER_EMAIL" '{
+      name: "archon-console-owner", decision: "allow",
+      include: [{ email: { email: $email } }],
+      session_duration: "8h" }')" | jq -r '.result.id')
+
+# 2) The Access application for the hostname, using that policy.
+RESPONSE=$(curl -fsS -X POST "$API/apps" \
+  -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+  --data "$(jq -n --arg host "$HOSTNAME_FQDN" --arg pol "$POLICY_ID" '{
+      name: "Archon Agent Console", type: "self_hosted", domain: $host,
+      session_duration: "8h", app_launcher_visible: false,
+      http_only_cookie_attribute: true, same_site_cookie_attribute: "strict",
+      policies: [{ id: $pol, precedence: 1 }] }')")
+
+echo "Access application created. Put these in /etc/archon-agent-console/env:"
+echo "  CF_ACCESS_REQUIRED=true"
+echo "  CF_ACCESS_TEAM_DOMAIN=<your-team>.cloudflareaccess.com   # Zero Trust > Settings > Custom Pages"
+echo "  CF_ACCESS_AUD=$(echo "$RESPONSE" | jq -r '.result.aud')"

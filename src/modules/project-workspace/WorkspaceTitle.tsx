@@ -36,6 +36,14 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.browser');
   }
 
+  if (activeTab === 'agy') {
+    return t('tabs.agy');
+  }
+
+  if (activeTab === 'prod') {
+    return t('tabs.prod');
+  }
+
   return t('misc.projectFallback');
 }
 

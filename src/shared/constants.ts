@@ -20,11 +20,12 @@ type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
 //----------------- BRANDING ------------
 
 /**
- * Font stack used to render the CloudCLI wordmark consistently wherever the brand name
- * appears as text. Apply it inline so the wordmark does not inherit a themed font.
+ * Font stack used to render the Archon wordmark consistently wherever the brand name
+ * appears as text (Archon Tech heading font, with system fallbacks). Apply it inline so the
+ * wordmark does not inherit a themed font.
  */
-export const CLOUDCLI_WORDMARK_FONT_FAMILY =
-  'ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji';
+export const BRAND_WORDMARK_FONT_FAMILY =
+  '"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji';
 
 // ---------------------------
 

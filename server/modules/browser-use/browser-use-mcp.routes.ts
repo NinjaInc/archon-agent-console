@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import express from 'express';
 
 import { browserUseService } from '@/modules/browser-use/browser-use.service.js';
@@ -12,10 +14,17 @@ function readBearerToken(header: unknown): string | null {
   return match?.[1]?.trim() || null;
 }
 
+/** Constant-time comparison, so response timing reveals nothing about the token. */
+function tokensMatch(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 router.use((req, res, next) => {
   const expected = browserUseService.getMcpToken();
   const token = readBearerToken(req.headers.authorization) || String(req.headers['x-browser-use-mcp-token'] || '');
-  if (!token || token !== expected) {
+  if (!token || !tokensMatch(token, expected)) {
     res.status(401).json({ success: false, error: 'Invalid Browser MCP token.' });
     return;
   }

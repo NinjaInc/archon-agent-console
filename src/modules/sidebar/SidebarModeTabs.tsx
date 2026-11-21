@@ -27,6 +27,8 @@ type SidebarModeTabsProps = {
  * Used by SidebarHeader for the section strip above the search box, in both the
  * desktop and the mobile header.
  *
+ * Conversations come first and are the default view; Projects is one tap away.
+ *
  * The sidebar is resizable, so the strip cannot assume it has room for all four
  * tabs: the ones that no longer fit move into a "…" dropdown at its right edge
  * instead of spilling out over the panel.
@@ -38,8 +40,8 @@ export default function SidebarModeTabs({
   t,
 }: SidebarModeTabsProps) {
   const tabs: ModeTab[] = [
-    { mode: 'projects', label: t('search.modeProjects'), icon: Folder, showLabel: true },
     { mode: 'conversations', label: t('search.modeConversations'), icon: MessageSquare, showLabel: true },
+    { mode: 'projects', label: t('search.modeProjects'), icon: Folder, showLabel: true },
     { mode: 'running', label: t('search.runningTooltip', 'Running sessions'), icon: Activity, showLabel: false },
     { mode: 'archived', label: t('search.archiveOnlyTooltip', 'Archive only'), icon: Archive, showLabel: false },
   ];

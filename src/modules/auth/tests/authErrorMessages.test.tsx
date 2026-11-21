@@ -8,9 +8,8 @@ import SetupForm from '@/modules/auth/SetupForm';
 
 type StubbedReply = { status: number; body: unknown };
 
-// The login and register routes hand every failure to the global error
-// middleware, which answers with the structured AppError envelope; the auth
-// middleware still answers with a bare `{ error: 'message' }`.
+// The ceremony routes hand every failure to the global error middleware, which
+// answers with the structured AppError envelope.
 const envelope = (code: string, message: string) => ({ success: false, error: { code, message } });
 
 // `api.auth.*` calls the global fetch directly, so stubbing it drives the
@@ -28,89 +27,89 @@ function stubAuthApi(replies: Record<string, StubbedReply>) {
   );
 }
 
-async function submitLogin(username: string, password: string) {
+// WebAuthn support is detected by the presence of PublicKeyCredential.
+const supportPasskeys = () => vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+
+async function signIn() {
   render(
     <AuthProvider>
       <LoginForm />
     </AuthProvider>,
   );
-  fireEvent.change(await screen.findByLabelText('Username'), { target: { value: username } });
-  fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign in with passkey' }));
 }
 
-async function submitSetup(username: string, password: string) {
+async function submitSetup(token: string) {
   render(
     <AuthProvider>
       <SetupForm />
     </AuthProvider>,
   );
-  fireEvent.change(await screen.findByLabelText('Username'), { target: { value: username } });
-  fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
-  fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: password } });
-  fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+  fireEvent.change(await screen.findByLabelText('Setup token'), { target: { value: token } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create passkey' }));
 }
 
 describe('auth screens surface server errors as text', () => {
   beforeEach(() => {
     localStorage.clear();
+    supportPasskeys();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the message of the structured envelope when the password is wrong, and keeps the form', async () => {
+  it('shows the message of the structured envelope when sign-in cannot start, and keeps the screen', async () => {
     stubAuthApi({
       '/api/auth/status': { status: 200, body: { needsSetup: false, isAuthenticated: false } },
-      '/api/auth/login': {
-        status: 401,
-        body: envelope('AUTH_INVALID_CREDENTIALS', 'Invalid username or password'),
+      '/api/auth/login/options': {
+        status: 429,
+        body: envelope('AUTH_RATE_LIMITED', 'Too many attempts. Try again later.'),
       },
     });
 
-    await submitLogin('triage', 'wrong-password');
+    await signIn();
 
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Invalid username or password');
-    expect(document.querySelectorAll('form')).toHaveLength(1);
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Too many attempts. Try again later.');
+    expect(screen.getByRole('button', { name: 'Sign in with passkey' })).toBeTruthy();
   });
 
-  it('shows the message of the structured envelope when registration is rejected', async () => {
+  it('shows the message of the structured envelope when the setup token is rejected', async () => {
     stubAuthApi({
       '/api/auth/status': { status: 200, body: { needsSetup: true, isAuthenticated: false } },
-      '/api/auth/register': {
-        status: 403,
-        body: envelope('AUTH_USER_ALREADY_CONFIGURED', 'User already exists. This is a single-user system.'),
+      '/api/auth/register/options': {
+        status: 401,
+        body: envelope('AUTH_BOOTSTRAP_INVALID', 'A valid, unexpired bootstrap token is required.'),
       },
     });
 
-    await submitSetup('triage', 'triage-pass-123');
+    await submitSetup('not-the-real-token');
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
-      'User already exists. This is a single-user system.',
+      'A valid, unexpired bootstrap token is required.',
     );
     expect(document.querySelectorAll('form')).toHaveLength(1);
   });
 
-  it('still shows the bare string error the auth middleware sends', async () => {
-    stubAuthApi({
-      '/api/auth/status': { status: 200, body: { needsSetup: false, isAuthenticated: false } },
-      '/api/auth/login': { status: 401, body: { error: 'Invalid API key' } },
-    });
+  it('asks for the setup token before contacting the server', async () => {
+    stubAuthApi({ '/api/auth/status': { status: 200, body: { needsSetup: true, isAuthenticated: false } } });
 
-    await submitLogin('triage', 'triage-pass-123');
+    await submitSetup('   ');
 
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Invalid API key');
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'Enter the setup token printed on the server console.',
+    );
   });
 
   it('falls back to the localized message when the envelope carries no usable message', async () => {
     stubAuthApi({
       '/api/auth/status': { status: 200, body: { needsSetup: false, isAuthenticated: false } },
-      '/api/auth/login': { status: 500, body: { success: false, error: { code: 'INTERNAL_ERROR', message: '  ' } } },
+      '/api/auth/login/options': { status: 500, body: { success: false, error: { code: 'INTERNAL_ERROR', message: '  ' } } },
     });
 
-    await submitLogin('triage', 'triage-pass-123');
+    await signIn();
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Login failed');
   });
@@ -118,13 +117,22 @@ describe('auth screens surface server errors as text', () => {
   it('falls back to the localized message when the body is not JSON', async () => {
     stubAuthApi({
       '/api/auth/status': { status: 200, body: { needsSetup: false, isAuthenticated: false } },
-      '/api/auth/login': { status: 502, body: '<html>Bad Gateway</html>' },
+      '/api/auth/login/options': { status: 502, body: '<html>Bad Gateway</html>' },
     });
 
-    await submitLogin('triage', 'triage-pass-123');
+    await signIn();
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe('Login failed');
     });
+  });
+
+  it('tells the user when the browser has no passkey support', async () => {
+    vi.unstubAllGlobals();
+    stubAuthApi({ '/api/auth/status': { status: 200, body: { needsSetup: false, isAuthenticated: false } } });
+
+    await signIn();
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'This browser does not support passkeys.');
   });
 });

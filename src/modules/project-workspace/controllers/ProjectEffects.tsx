@@ -36,7 +36,8 @@ export default function ProjectEffects({
         writeSelectedProvider(message.provider as LLMProvider);
       }
 
-      setActiveTab('chat');
+      // Antigravity Chat notifications open that tab; everything else opens the chat.
+      setActiveTab(message.tab === 'agy-chat' ? 'agy-chat' : 'chat');
       setSidebarOpen(false);
       void refreshProjectsSilently();
 

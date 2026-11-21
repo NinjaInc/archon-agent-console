@@ -120,6 +120,12 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  /** Extra environment for a specific agent's PTY only (e.g. GEMINI_API_KEY for agy). */
+  /** Returns the real path when `candidate` is inside an allowed projects root, otherwise null. */
+  resolveAllowedProjectPath?: (candidate: string) => Promise<string | null>;
+  getAgentEnvironment?: (provider: string) => Promise<Record<string, string>>;
+  /** The ssh launch for the Prod Claude terminal (a separate Claude Code on the production host), or null when not set up. */
+  getProdClaudeLaunch?: () => Promise<{ file: string; args: string[]; env: Record<string, string> } | null>;
 };
 
 /**
@@ -241,6 +247,12 @@ function buildShellCommand(
       return otherProgram(`codex resume "${resumeSessionId}" || codex`);
     }
     return otherProgram('codex');
+  }
+
+  // Antigravity (agy) is terminal-only here. It needs a real TTY, which this
+  // node-pty launch provides; it has no resumable app session id to pass.
+  if (provider === 'agy') {
+    return otherProgram('agy');
   }
 
   if (provider === 'opencode') {
@@ -571,7 +583,10 @@ export function handleShellConnection(
           isPlainShell && initialCommand
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
-        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        // agy gets its own PTY slot: without this it would reattach to the
+        // Claude shell that already owns `<project>_default`.
+        const agentSuffix = provider === 'agy' ? '_agy' : provider === 'prod-claude' ? '_prod' : '';
+        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}${agentSuffix}`;
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
@@ -616,7 +631,15 @@ export function handleShellConnection(
           return;
         }
 
-        const resolvedProjectPath = path.resolve(projectPath);
+        let resolvedProjectPath = path.resolve(projectPath);
+        if (dependencies.resolveAllowedProjectPath) {
+          const allowedPath = await dependencies.resolveAllowedProjectPath(resolvedProjectPath);
+          if (!allowedPath) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Project path is outside the allowed projects roots' }));
+            return;
+          }
+          resolvedProjectPath = allowedPath;
+        }
         try {
           const stats = fs.statSync(resolvedProjectPath);
           if (!stats.isDirectory()) {
@@ -640,20 +663,40 @@ export function handleShellConnection(
         );
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
-        const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-        const shellArgs =
-          os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+        // Prod Claude is an ssh session to another machine. It never runs through this server's shell, and it
+        // starts from an empty environment so none of this server's tokens or keys can reach the other side.
+        const prodLaunch = provider === 'prod-claude' && dependencies.getProdClaudeLaunch
+          ? await dependencies.getProdClaudeLaunch()
+          : null;
+        if (provider === 'prod-claude' && !prodLaunch) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Prod Claude is not set up on this server' }));
+          return;
+        }
+        const shell = prodLaunch ? prodLaunch.file : os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+        const shellArgs = prodLaunch
+          ? prodLaunch.args
+          : os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
+        // Only agy PTYs receive agent secrets; the Claude and plain shells never do.
+        const agentEnvironment =
+          provider === 'agy' && dependencies.getAgentEnvironment
+            ? await dependencies.getAgentEnvironment(provider)
+            : {};
 
         shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
           cwd: resolvedProjectPath,
-          env: {
+          env: prodLaunch ? {
+            ...prodLaunch.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+          } : {
             ...process.env,
+            ...agentEnvironment,
             [prioritizedPath.key]: prioritizedPath.value,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
@@ -787,9 +830,13 @@ export function handleShellConnection(
               ? 'Cursor'
               : provider === 'codex'
                 ? 'Codex'
-                : provider === 'opencode'
+                : provider === 'agy'
+                  ? 'Antigravity'
+                  : provider === 'prod-claude'
+                    ? 'PRODUCTION Claude'
+                    : provider === 'opencode'
                     ? 'OpenCode'
-                  : 'Claude';
+                    : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

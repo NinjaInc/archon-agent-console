@@ -42,6 +42,12 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 // broad workspace (for example, a user's home directory) cannot exhaust the
 // server heap before the browser has a chance to switch to a narrower project.
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
+/**
+ * A project opened at a whole allowed root (for example the home directory) is a place to browse
+ * from, not a code base: it shows this many levels, without hidden folders, and the user drills
+ * into a subfolder for more. Ordinary projects keep the full-depth tree.
+ */
+const BROAD_ROOT_TREE_DEPTH = 3;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
@@ -93,7 +99,7 @@ function validateFilename(name: string): void {
   }
 }
 
-function resolvePathInsideProject(projectRoot: string, targetPath: string): string {
+function lexicalPathInsideProject(projectRoot: string, targetPath: string): string {
   const resolvedPath = path.isAbsolute(targetPath)
     ? path.resolve(targetPath)
     : path.resolve(projectRoot, targetPath);
@@ -185,12 +191,130 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     : 1;
   const { acquire, release } = createConcurrencyLimiter(concurrencyLimit);
 
+  const workspaceRoots = dependencies.workspace.rootPaths ?? [dependencies.workspace.rootPath];
+  const deniedPaths = dependencies.workspace.deniedPaths ?? [];
+  /** True when the project is an allowed root itself rather than something inside one. */
+  async function isWholeWorkspaceRoot(projectRoot: string): Promise<boolean> {
+    try {
+      const realProject = await fileSystem.realpath(projectRoot);
+      for (const root of workspaceRoots) {
+        try {
+          if ((await fileSystem.realpath(root)) === realProject) {
+            return true;
+          }
+        } catch {
+          // A root that does not exist here cannot be the project.
+        }
+      }
+    } catch {
+      // The project path was already checked by resolveProjectRoot.
+    }
+    return false;
+  }
+
+  const isDenied = (candidate: string) =>
+    deniedPaths.some((entry) => candidate === entry || candidate.startsWith(`${entry}${path.sep}`));
+
   async function resolveProjectRoot(projectId: string): Promise<string> {
     const projectRoot = await dependencies.projects.getProjectPathById(projectId);
     if (!projectRoot) {
       throw createFileTreeError('Project not found', 404, 'PROJECT_NOT_FOUND');
     }
+    // A project registered outside PROJECTS_ROOTS (for example the home directory,
+    // which holds ~/.ssh) is not browsable or writable through the explorer.
+    if (!(await isInsideWorkspaceRoots(projectRoot))) {
+      throw createFileTreeError('Project is outside the allowed projects roots', 403, 'PROJECT_OUTSIDE_ROOTS');
+    }
     return projectRoot;
+  }
+
+  /** True when `candidate` resolves, symlinks included, to a place under one of the allowed roots. */
+  async function isInsideWorkspaceRoots(candidate: string): Promise<boolean> {
+    let realCandidate: string;
+    try {
+      realCandidate = await fileSystem.realpath(candidate);
+    } catch {
+      return false;
+    }
+    if (isDenied(realCandidate)) {
+      return false;
+    }
+    for (const root of workspaceRoots) {
+      try {
+        const realRoot = await fileSystem.realpath(root);
+        if (realCandidate === realRoot || realCandidate.startsWith(`${realRoot}${path.sep}`)) {
+          return true;
+        }
+      } catch {
+        // A root that does not exist on this machine contains nothing.
+      }
+    }
+    return false;
+  }
+
+  const isMissingPathError = (error: unknown) => {
+    const code = readErrorCode(error);
+    return code === 'ENOENT' || code === 'ENOTDIR';
+  };
+
+  /**
+   * Resolves a path that must stay inside the project, symlinks included.
+   *
+   * The lexical check alone is not enough: a link inside the project that points
+   * at /etc or ~/.ssh passes it, and a write then follows the link. So the
+   * nearest existing ancestor is resolved with realpath and must remain inside
+   * the project's real path. Dangling links are refused because writing through
+   * one would create the target outside. `followFinal: false` is for delete and
+   * rename, which act on a link itself rather than what it points at.
+   */
+  async function resolvePathInsideProject(
+    projectRoot: string,
+    targetPath: string,
+    options: { followFinal?: boolean } = {},
+  ): Promise<string> {
+    const lexicalPath = lexicalPathInsideProject(projectRoot, targetPath);
+    const realProjectRoot = await fileSystem.realpath(projectRoot);
+    const outside = () => createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+
+    let probe = options.followFinal === false ? path.dirname(lexicalPath) : lexicalPath;
+    for (;;) {
+      try {
+        const realProbe = await fileSystem.realpath(probe);
+        if (realProbe !== realProjectRoot && !realProbe.startsWith(`${realProjectRoot}${path.sep}`)) {
+          throw outside();
+        }
+        // A project that contains a credentials folder (the home directory) must not expose it.
+        if (isDenied(realProbe)) {
+          throw createFileTreeError('Path is a protected credentials folder', 403, 'PATH_PROTECTED');
+        }
+        return lexicalPath;
+      } catch (error) {
+        if (error instanceof AppError) {
+          throw error;
+        }
+        if (!isMissingPathError(error)) {
+          throw error;
+        }
+        // realpath failed: either the path does not exist yet, or it is a dangling link.
+        try {
+          await fileSystem.lstat(probe);
+          throw outside();
+        } catch (lstatError) {
+          if (lstatError instanceof AppError) {
+            throw lstatError;
+          }
+          if (!isMissingPathError(lstatError)) {
+            throw lstatError;
+          }
+        }
+        const parent = path.dirname(probe);
+        // Climbing past the project root fails the realpath containment check above on the next pass.
+        if (parent === probe) {
+          throw outside();
+        }
+        probe = parent;
+      }
+    }
   }
 
   /**
@@ -212,6 +336,10 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       for await (const entry of fileSystem.openDirectory(directoryPath)) {
         const isDirectory = entry.isDirectory();
         if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
+          continue;
+        }
+        // Credential folders are not even listed.
+        if (isDenied(path.join(directoryPath, entry.name))) {
           continue;
         }
 
@@ -362,13 +490,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         return readOnlyPath;
       }
 
-      const workspacePath = await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
+      const workspacePath = await resolvePathUnderRoots(targetPath, workspaceRoots, deniedPaths);
       if (workspacePath) {
         return workspacePath;
       }
     }
 
-    return resolvePathInsideProject(projectRoot, targetPath);
+    return await resolvePathInsideProject(projectRoot, targetPath);
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -494,7 +622,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, filePath);
       try {
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {
@@ -527,6 +655,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         }
       }
 
+      if (await isWholeWorkspaceRoot(projectRoot)) {
+        const baseFilter = includeEntry ?? includeEntryByFallbackDirectoryNames;
+        const withoutHiddenFolders: FileTreeEntryFilter = (entryPath, isDirectory) =>
+          baseFilter(entryPath, isDirectory) && !(isDirectory && path.basename(entryPath).startsWith('.'));
+        return buildFileTree(projectRoot, BROAD_ROOT_TREE_DEPTH, 0, withoutHiddenFolders);
+      }
+
       return buildFileTree(projectRoot, 10, 0, includeEntry);
     },
 
@@ -536,7 +671,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const targetPath = input.parentPath
         ? path.join(input.parentPath, input.name)
         : input.name;
-      const resolvedPath = resolvePathInsideProject(projectRoot, targetPath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, targetPath);
 
       try {
         await fileSystem.access(resolvedPath);
@@ -580,7 +715,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     async renameEntry(input) {
       validateFilename(input.newName);
       const projectRoot = await resolveProjectRoot(input.projectId);
-      const resolvedOldPath = resolvePathInsideProject(projectRoot, input.oldPath);
+      const resolvedOldPath = await resolvePathInsideProject(projectRoot, input.oldPath, { followFinal: false });
 
       try {
         await fileSystem.access(resolvedOldPath);
@@ -589,7 +724,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
 
       const resolvedNewPath = path.join(path.dirname(resolvedOldPath), input.newName);
-      resolvePathInsideProject(projectRoot, resolvedNewPath);
+      await resolvePathInsideProject(projectRoot, resolvedNewPath, { followFinal: false });
       try {
         await fileSystem.access(resolvedNewPath);
         throw createFileTreeError(
@@ -622,7 +757,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async deleteEntry(input) {
       const projectRoot = await resolveProjectRoot(input.projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, input.targetPath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, input.targetPath, { followFinal: false });
       let stats;
       try {
         stats = await fileSystem.stat(resolvedPath);
@@ -668,7 +803,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           || input.targetPath === '.'
           || input.targetPath === './'
           ? path.resolve(projectRoot)
-          : resolvePathInsideProject(projectRoot, input.targetPath);
+          : await resolvePathInsideProject(projectRoot, input.targetPath);
 
         try {
           await fileSystem.access(resolvedTargetDirectory);
@@ -683,7 +818,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           const destinationPath = path.join(resolvedTargetDirectory, fileName);
 
           try {
-            resolvePathInsideProject(projectRoot, destinationPath);
+            await resolvePathInsideProject(projectRoot, destinationPath);
           } catch (error) {
             if (error instanceof AppError && error.statusCode === 403) {
               await cleanupTemporaryFiles([file]);

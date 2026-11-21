@@ -9,6 +9,9 @@ import { handleShellConnection } from '@/modules/websocket/services/shell-websoc
 import { handleDesktopNotificationsConnection } from '@/modules/notifications/index.js';
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
+// How often open sockets re-check that their login session is still valid.
+const SESSION_RECHECK_INTERVAL_MS = Number(process.env.WS_SESSION_RECHECK_MS) || 15_000;
+
 type WebSocketServerDependencies = {
   verifyClient: Parameters<typeof verifyWebSocketClient>[1];
   chat: Parameters<typeof handleChatConnection>[2];
@@ -86,13 +89,30 @@ export function createWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({
     server,
+    // Async form: the Cloudflare Access check may need to fetch the team JWKS.
     verifyClient: ((
-      info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0]
-    ) => verifyWebSocketClient(info, dependencies.verifyClient)),
+      info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0],
+      callback: (verified: boolean, code?: number, message?: string) => void,
+    ) => {
+      verifyWebSocketClient(info, dependencies.verifyClient).then(
+        (verified) => callback(verified, verified ? undefined : 401, verified ? undefined : 'Unauthorized'),
+        () => callback(false, 401, 'Unauthorized'),
+      );
+    }) as never,
   });
 
   wss.on('connection', (ws, request) => {
     attachWebSocketHeartbeat(ws);
+
+    // Revocation must reach sockets that are already open (including shell PTYs),
+    // not only new requests: re-check the session on a timer and close if it ended.
+    const sessionWatch = setInterval(() => {
+      if (!dependencies.verifyClient.isSessionActive(request)) {
+        ws.close(4401, 'session ended');
+      }
+    }, SESSION_RECHECK_INTERVAL_MS);
+    ws.on('close', () => clearInterval(sessionWatch));
+    ws.on('error', () => clearInterval(sessionWatch));
 
     const incomingRequest = request as AuthenticatedWebSocketRequest;
     const url = incomingRequest.url ?? '/';

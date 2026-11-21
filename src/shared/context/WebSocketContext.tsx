@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useAuth } from '@/modules/auth';
 import { IS_PLATFORM } from '@/shared/utils';
-import { expireAuthSession, isAuthTokenExpired } from '@/shared/authToken';
 import type { ServerEvent } from '@/shared/types';
 
 
@@ -49,15 +48,10 @@ export const useWebSocket = () => {
   return context;
 };
 
-const buildWebSocketUrl = (token: string | null) => {
+// The browser attaches the HttpOnly session cookie to the upgrade request itself.
+const buildWebSocketUrl = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
-  if (!token) return null;
-  if (isAuthTokenExpired(token)) {
-    expireAuthSession();
-    return null;
-  }
-  return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
+  return `${protocol}//${window.location.host}/ws`;
 };
 
 const useWebSocketProviderState = (): WebSocketContextType => {
@@ -75,7 +69,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   // not read as a lost connection, or every page load would flash the indicator.
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { isLoading: isAuthLoading, token, user } = useAuth();
+  const { isLoading: isAuthLoading, user } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -94,9 +88,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     if (!IS_PLATFORM && (isAuthLoading || !user)) return;
     try {
       // Construct WebSocket URL
-      const wsUrl = buildWebSocketUrl(token);
-
-      if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
+      const wsUrl = buildWebSocketUrl();
 
       const websocket = new WebSocket(wsUrl);
       // Store connecting sockets too, so a token refresh can close them before
@@ -145,7 +137,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
+  }, [dispatch, isAuthLoading, user]); // reconnect with current authentication state
 
   // Declared after `connect` so the effect body does not reference it before
   // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
