@@ -11,13 +11,20 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          # The same Node the project is developed and tested on. Node 22's test runner can fail a whole file with
+          # "Unable to deserialize cloned data" when a test's own console output interleaves with its result.
+          node-version: 26
           cache: npm
       - run: npm ci
+        env:
+          # @vscode/ripgrep downloads a prebuilt binary from the GitHub API while installing. An anonymous request from a
+          # shared runner is easily rate-limited, which fails the whole install; the workflow's own token is enough.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
