@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # install-craft-mcp - install ArtCraft "Crafting Apps" (PhotoCraft, WordCraft, ...) and register their
-# built-in MCP servers with Claude Code, so Claude can edit PSD/DOCX/XLSX/PDF/SVG/... on this server.
+# built-in MCP servers, so Claude can edit PSD/DOCX/XLSX/PDF/SVG/... on this server.
 # Author: Josh Neufield (Archon Tech)
 #
 #   scripts/install-craft-mcp.sh                 install the default set
 #   scripts/install-craft-mcp.sh photo word pdf  install just these
-#   scripts/install-craft-mcp.sh --list          show what is installed and registered
-#   scripts/install-craft-mcp.sh --remove photo  unregister and delete an app
+#   scripts/install-craft-mcp.sh --list          show what is installed and where it is switched on
+#   scripts/install-craft-mcp.sh --remove photo  switch off everywhere and delete an app
+#
+# Installing does NOT register anything with Claude. Each registered server adds its tools to every chat's prompt
+# (all thirteen apps are about 860 tools), so switch them on only where needed: scripts/craft-mcp.sh on photo
 #
 # Each app is the vendor's own signed release from github.com/storytold/<app>craft (no third-party
 # gateway). For every app this script checks, in order, before anything runs:
@@ -15,10 +18,10 @@
 #   3. SHA256SUMS.txt and the tarball both carry a good signature from that key,
 #   4. the archive has no absolute or ".." paths,
 #   5. the CLI starts and answers an MCP handshake with at least one tool.
-# Then it registers `<app>craft` as a user-scope stdio MCP server (`claude mcp add --scope user`).
+# Switching an app on for a project is a separate, cheap step (scripts/craft-mcp.sh on <app>).
 #
-# Needs: gh (logged in), gpg, curl, tar, node, claude. Installs under $CRAFT_ROOT (default ~/.local/opt/artcraft);
-# nothing system-wide, no root.
+# Needs: gh (logged in), gpg, curl, tar, node (claude only for --remove). Installs under $CRAFT_ROOT
+# (default ~/.local/opt/artcraft); nothing system-wide, no root.
 set -euo pipefail
 
 PINNED_FPR="2B76741B414AAD6CD33E631213A005C0B9D7C3ED"
@@ -30,7 +33,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 die() { echo "install-craft-mcp: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"; }
-for c in gh gpg curl tar node claude; do need "$c"; done
+for c in gh gpg curl tar node; do need "$c"; done
 
 case "${1:-}" in
   --list)
@@ -38,12 +41,14 @@ case "${1:-}" in
       [ -e "$d" ] || continue
       echo "$(basename "$d") -> $(readlink "$d")"
     done
-    claude mcp list 2>/dev/null | grep -E "craft:" || true
+    "$HERE/craft-mcp.sh" status
     exit 0 ;;
   --remove)
     shift
+    need claude
     for app in "$@"; do
-      claude mcp remove "${app}craft" --scope user >/dev/null 2>&1 || true
+      [[ "$app" =~ ^[a-z]{2,12}$ ]] || die "bad app name: $app"
+      "$HERE/craft-mcp.sh" off "$app" --everywhere >/dev/null 2>&1 || true
       rm -rf "$ROOT/${app}craft" "$ROOT/${app}craft"-[0-9]*
       echo "removed ${app}craft"
     done
@@ -83,8 +88,6 @@ install_app() {
   ln -sfn "$top" "$ROOT/${app}craft"
   cli="$ROOT/${app}craft/bin/$(basename "$cli")"
   info="$(node "$HERE/mcp-probe.mjs" "$cli" mcp)" || return 1
-  claude mcp remove "${app}craft" --scope user >/dev/null 2>&1 || true
-  claude mcp add --scope user "${app}craft" -- "$cli" mcp >/dev/null
   echo "  $info"
   rm -rf "$work"
 }
@@ -94,5 +97,6 @@ for app in "${APPS[@]}"; do
   if install_app "$app"; then ok+=("$app"); else failed+=("$app"); fi
 done
 echo
-echo "installed and registered: ${ok[*]:-none}"
+echo "installed: ${ok[*]:-none}"
+echo "Nothing is switched on yet. To use one in a project:  scripts/craft-mcp.sh on photo --project /path/to/project"
 [ ${#failed[@]} -eq 0 ] || { echo "FAILED: ${failed[*]}"; exit 1; }

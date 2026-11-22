@@ -23,7 +23,8 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 * **Prod Claude** tab: an isolated ssh terminal to the Claude Code on another host
 * `archon-prod`: a small Portainer tool (status, logs, redeploy, create stack) with approval on every change
 * Android Chrome push notifications for Agy Chat, a status-bar badge, and tap-to-open
-* `scripts/install-craft-mcp.sh`: signed, verified install of ArtCraft's Crafting Apps as MCP servers
+* `scripts/install-craft-mcp.sh`: signed, verified install of ArtCraft's Crafting Apps
+* `scripts/craft-mcp.sh`: switch the ArtCraft MCP servers on or off per project, so they cost nothing until needed (a fresh chat dropped from about 62k to 27k prompt tokens)
 * Archon Tech branding, PWA icons, a "More" menu for plugin tools, and a new tab order (chats together, terminals together)
 * **Local LLM** tab: a small model on your own hardware via Ollama (default `qwen3:8b`) for draft-only chat and four task shortcuts (`/summarise-logs`, `/explain-diff`, `/commit-msg`, `/boilerplate`). No tools; secrets are refused before sending; diffs drop lockfiles, `.env` files and binaries; anything that does not fit the 8k window is refused, not cut. Health dot, cold-start and idle timeouts, warm-up, and an ask-first fallback to Claude Chat when the host is offline
 * `scripts/git-hooks/append-coauthor.sh`: an optional `prepare-commit-msg` helper that adds a `Co-Authored-By` trailer exactly once
@@ -35,6 +36,7 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 * the sidebar opens on **Conversations** (recent chats across projects) with **Projects** as the second tab
 * *Settings → About* now shows the banner, what the console does (including the Local LLM) and screenshots
 * README and screenshots retaken from the current UI
+* the ArtCraft installer no longer registers the servers globally
 
 ### Removed
 

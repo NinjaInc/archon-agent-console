@@ -129,16 +129,22 @@ It creates a key used only for this tab, pins the host's SSH key (compare the pr
 
 The key file lives on this server as the service user, so a compromised agent here could still read it. The red banner and the restricted key limit what it could do with it; treat the production Claude's own permission prompts as the last line of defence.
 
-### Creative tools (optional)
+### Creative tools (optional, switched on per project)
 
-`scripts/install-craft-mcp.sh` adds [ArtCraft's Crafting Apps](https://getartcraft.com/apps) as MCP servers for Claude Code, so Claude can edit **PSD, DOCX, XLSX, PDF, SVG, video and CAD files** on the server: PhotoCraft (Photoshop-style), WordCraft, DeckCraft, GridCraft, VectorCraft, PdfCraft, LightCraft, FilmCraft, DesignCraft, EffectCraft, CADCraft and SoundCraft. They are the vendor's own signed headless CLIs, not a third-party gateway. For each app the script verifies the signing key's pinned fingerprint, the SHA-256, both PGP signatures and the archive paths, then does a real MCP handshake before registering it (`claude mcp add --scope user`). Everything installs under `~/.local/opt/artcraft`, with no root.
+`scripts/install-craft-mcp.sh` installs [ArtCraft's Crafting Apps](https://getartcraft.com/apps) so Claude Code can edit **PSD, DOCX, XLSX, PDF, SVG, video and CAD files** on the server: PhotoCraft (Photoshop-style), WordCraft, DeckCraft, GridCraft, VectorCraft, PdfCraft, LightCraft, FilmCraft, DesignCraft, EffectCraft, CADCraft and SoundCraft. They are the vendor's own signed headless CLIs, not a third-party gateway. For each app the script verifies the signing key's pinned fingerprint, the SHA-256, both PGP signatures and the archive paths, then does a real MCP handshake. Everything installs under `~/.local/opt/artcraft`, with no root.
+
+**Installing registers nothing, on purpose.** Every MCP server a Claude session loads adds its tools to the prompt, and the thirteen apps together are about 860 tools. Registered globally, that made a one-line chat start with a 62,000-token prompt (about $0.25); with them off it is 27,000 (about $0.11). So you switch them on only where you need them:
 
 ```bash
-scripts/install-craft-mcp.sh            # install the default set
-scripts/install-craft-mcp.sh photo pdf  # or just some
-scripts/install-craft-mcp.sh --list     # what is installed and registered
-scripts/install-craft-mcp.sh --remove word
+scripts/install-craft-mcp.sh                          # install the apps (registers nothing)
+scripts/craft-mcp.sh on photo pdf --project ~/projects/site   # switch on for one project
+scripts/craft-mcp.sh on all --project ~/projects/site         # every installed app, that project only
+scripts/craft-mcp.sh status                           # what is installed and where it is on
+scripts/craft-mcp.sh off photo --project ~/projects/site      # switch off again
+scripts/craft-mcp.sh off all --everywhere             # remove from every project and the user scope
 ```
+
+It uses Claude's *local* scope: the entry lives in `~/.claude.json` under that project and is never committed. Claude keys it by the project's **git repository**, so each project should be its own repo (a plain folder inside another repo shares that repo's setting). Start a **new** chat for a change to take effect. Use `--user` only if you really want them in every chat.
 
 An MCP server runs as the service user, and Claude asks before using each tool unless you allow it.
 
