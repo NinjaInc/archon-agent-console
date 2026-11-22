@@ -159,3 +159,7 @@ agy.env
 deploy/**/*.local
 deploy/cloudflared/*.json
 .cloudflared/
+
+# Python bytecode (scripts/desktop tests)
+__pycache__/
+*.pyc
