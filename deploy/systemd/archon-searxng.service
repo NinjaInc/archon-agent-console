@@ -1,0 +1,31 @@
+# SearXNG, the private metasearch engine behind the console's Web search. Author: Josh Neufield (Archon Tech)
+# A systemd USER unit (no root, no Docker). Installed by scripts/install-searxng.sh; listens on 127.0.0.1 only.
+[Unit]
+Description=SearXNG private search (Archon Agent Console)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/opt/searxng/src
+EnvironmentFile=%h/.config/archon-agent-console/searxng/env
+Environment=SEARXNG_SETTINGS_PATH=%h/.config/archon-agent-console/searxng/settings.yml
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/.local/opt/searxng/venv/bin/granian --interface wsgi --host 127.0.0.1 --port 8888 --workers 1 searx.webapp:app
+Restart=on-failure
+RestartSec=5
+
+# This box has 8 GB shared with the console: a runaway search service must die alone, not take the console with it.
+MemoryMax=450M
+MemorySwapMax=0
+TasksMax=200
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+LimitCORE=0
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

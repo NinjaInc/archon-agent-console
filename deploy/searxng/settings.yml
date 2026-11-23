@@ -1,0 +1,51 @@
+# SearXNG settings for the Archon Agent Console (private, loopback only). Author: Josh Neufield (Archon Tech)
+# The secret key is NOT here: scripts/install-searxng.sh generates one into an owner-only env file (SEARXNG_SECRET).
+use_default_settings:
+  engines:
+    # A small set that works from a server address. Google and Bing block server IPs; Startpage and Mojeek are marked
+    # inactive upstream. Add more here (names as in SearXNG's own settings.yml), then restart the service.
+    keep_only:
+      - duckduckgo
+      - brave
+      - wikipedia
+      - github
+      - stackoverflow
+      - mdn
+      - pypi
+      - npm
+      - arxiv
+      - docker hub
+      - hackernews
+
+engines:
+  - name: brave
+    disabled: false
+  - name: npm
+    disabled: false
+  - name: hackernews
+    disabled: false
+
+general:
+  instance_name: "Archon search"
+  debug: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  # json is what the console and the agent tool read.
+  formats:
+    - html
+    - json
+
+server:
+  bind_address: "127.0.0.1"
+  port: 8888
+  limiter: false          # a single private user; the limiter needs a Valkey server we do not run
+  public_instance: false
+  image_proxy: false
+
+outgoing:
+  request_timeout: 6.0
+  max_request_timeout: 10.0
