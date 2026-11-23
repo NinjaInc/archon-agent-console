@@ -60,11 +60,13 @@ export function createAgyChatRouter(
   });
 
   router.post('/:chatId/messages', async (req, res, next) => {
-    const controller = new AbortController();
     const startedAt = Date.now();
     const outcome = { status: 'SUCCESS', steps: 0, error: undefined as string | undefined };
-    // The browser closing the stream (or the Stop button aborting the fetch) stops agy.
-    res.on('close', () => controller.abort());
+    // The turn belongs to the chat, not to this connection. A browser that disconnects (tab switch, sleeping laptop, a
+    // tunnel hiccup, a phone locking) must not kill the turn and lose the reply: it keeps running, is saved when it ends,
+    // and the page picks it up again. Only the Stop button (POST /:chatId/stop) cancels a turn.
+    let clientGone = false;
+    res.on('close', () => { clientGone = true; });
     let streaming = false;
     // Cloudflare closes a response that sends nothing for ~100 s, which would cut a long turn; a comment frame keeps it open.
     let heartbeat: NodeJS.Timeout | null = null;
@@ -76,14 +78,14 @@ export function createAgyChatRouter(
           if (event.type === 'done') outcome.status = event.status;
           else if (event.type === 'error') outcome.error = event.message;
           else if (event.type === 'tool' && event.state === 'done') outcome.steps += 1;
+          if (clientGone) return; // nobody is listening; the service still saves everything
           if (!streaming) {
             streaming = true;
             res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-            heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000);
+            heartbeat = setInterval(() => { if (!clientGone) res.write(': ping\n\n'); }, 25_000);
           }
           res.write(`data: ${JSON.stringify(event)}\n\n`);
         },
-        controller.signal,
       );
       if (heartbeat) clearInterval(heartbeat);
       const userId = (req as { user?: { id?: number } }).user?.id;
@@ -94,10 +96,12 @@ export function createAgyChatRouter(
           // A notification problem must never fail the chat.
         }
       }
+      if (clientGone) return;
       if (!streaming) res.status(204).end();
       else res.end();
     } catch (error) {
       if (heartbeat) clearInterval(heartbeat);
+      if (clientGone) return;
       // Validation errors arrive before any streaming starts, so the normal error handler can answer.
       if (!streaming) {
         next(error);

@@ -292,6 +292,7 @@ export function createAgyChatService(dependencies: AgyChatDependencies) {
         dependencies.store.updateChat(row.chat_id, { updated_at: now(), ...(model ? { model } : {}) });
 
         if (cancelled) {
+          dependencies.audit?.(`turn stopped (chat ${row.chat_id.slice(0, 8)}, ${state.parts.length} saved part${state.parts.length === 1 ? '' : 's'})`);
           emit({ type: 'done', status: 'STOPPED' });
         } else if (code === 0 && /auto-denied/.test(finished.stderrText())) {
           // agy exits normally (and even marks the tool step done) when a tool needed a permission it cannot ask

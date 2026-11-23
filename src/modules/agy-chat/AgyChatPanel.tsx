@@ -98,12 +98,16 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
   const [showAllowed, setShowAllowed] = useState(false);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  // True while the server is still working on this chat's last message with no live stream attached here: after a reload, a tab
+  // switch, or a dropped connection. The turn belongs to the chat, so the page polls until it ends and then shows the saved reply.
+  const [serverRunning, setServerRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokens, setTokens] = useState<{ input: number; output: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const counter = useRef(0);
   const nextId = () => `live-${counter.current++}`;
+  const busy = isStreaming || serverRunning;
 
   const loadChats = useCallback(async () => {
     const data = await readApiJson<{ chats: ChatSummary[] }>(await api.agyChat.list(projectId));
@@ -115,13 +119,15 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
     setChatId(id);
     setError(null);
     setTokens(null);
+    setServerRunning(false);
     if (!id) {
       setItems([]);
       return;
     }
-    const data = await readApiJson<{ chat: ChatSummary; messages: SavedMessage[] }>(await api.agyChat.get(id));
+    const data = await readApiJson<{ chat: ChatSummary; messages: SavedMessage[]; running?: boolean }>(await api.agyChat.get(id));
     setItems(data.messages.map(fromSaved).filter((item): item is ChatItem => item !== null));
     if (data.chat.model) setModel(data.chat.model);
+    setServerRunning(data.running === true);
   }, []);
 
   // Load the project's chats and the model list when the project changes.
@@ -138,12 +144,33 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load Antigravity chats');
       }
     })();
+    // Leaving closes this page's stream only; the server keeps the turn running and saves its reply.
     return () => { cancelled = true; abortRef.current?.abort(); };
   }, [loadChats, openChat]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
+    bottomRef.current?.scrollIntoView?.({ block: 'end' });
   }, [items]);
+
+  // While the server is still working with no stream attached here, check on it every few seconds and show the saved reply when it lands.
+  useEffect(() => {
+    if (!serverRunning || !chatId || isStreaming) return undefined;
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const data = await readApiJson<{ messages: SavedMessage[]; running?: boolean }>(await api.agyChat.get(chatId));
+        if (cancelled) return;
+        setItems(data.messages.map(fromSaved).filter((item): item is ChatItem => item !== null));
+        if (data.running !== true) {
+          setServerRunning(false);
+          void loadChats().catch(() => undefined);
+        }
+      } catch {
+        // A hiccup while checking is not the end of the turn; try again on the next tick.
+      }
+    }, 3000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [serverRunning, chatId, isStreaming, loadChats]);
 
   const handleEvent = useCallback((event: StreamEvent) => {
     if (event.type === 'text') {
@@ -171,14 +198,14 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
 
   const send = async () => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || busy) return;
     setError(null);
     setIsStreaming(true);
     setInput('');
     const controller = new AbortController();
     abortRef.current = controller;
+    let id = chatId;
     try {
-      let id = chatId;
       if (!id) {
         const created = await readApiJson<{ chat: ChatSummary }>(await api.agyChat.create(projectId, model || undefined));
         id = created.chat.chatId;
@@ -190,7 +217,14 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
       await readEventStream(response, handleEvent);
     } catch (caught) {
       if ((caught as { name?: string }).name !== 'AbortError') {
-        setError(caught instanceof Error ? caught.message : 'The message could not be sent');
+        // A server refusal carries a status. No status means the connection dropped, which does NOT stop the turn on the server:
+        // check whether it is still running and wait for it instead of reporting a failure that did not happen.
+        let stillRunning = false;
+        if (id && (caught as { status?: number }).status === undefined) {
+          try { stillRunning = (await readApiJson<{ running?: boolean }>(await api.agyChat.get(id))).running === true; } catch { /* unreachable: report below */ }
+        }
+        if (stillRunning) setServerRunning(true);
+        else setError(caught instanceof Error ? caught.message : 'The message could not be sent');
       }
     } finally {
       setIsStreaming(false);
@@ -203,6 +237,7 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
 
   const stop = () => {
     abortRef.current?.abort();
+    // Closing the stream no longer stops the turn on the server; this is what does.
     if (chatId) void api.agyChat.stop(chatId).catch(() => undefined);
   };
 
@@ -240,22 +275,22 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
           aria-label="Chat"
           value={chatId ?? ''}
           onChange={(event) => void openChat(event.target.value || null)}
-          disabled={isStreaming}
+          disabled={busy}
           className="h-8 max-w-[16rem] rounded-lg border border-border bg-background px-2 text-sm"
         >
           <option value="">New chat</option>
           {chats.map((chat) => <option key={chat.chatId} value={chat.chatId}>{chat.title}</option>)}
         </select>
-        <Button size="sm" variant="outline" onClick={() => void newChat()} disabled={isStreaming} aria-label="New chat"><Plus className="h-3.5 w-3.5" /></Button>
-        {chatId && <Button size="sm" variant="ghost" onClick={() => void deleteChat()} disabled={isStreaming} aria-label="Delete chat"><Trash2 className="h-3.5 w-3.5" /></Button>}
-        <select aria-label="Model" value={model} onChange={(event) => setModel(event.target.value)} disabled={isStreaming} className="ml-auto h-8 max-w-[14rem] rounded-lg border border-border bg-background px-2 text-sm">
+        <Button size="sm" variant="outline" onClick={() => void newChat()} disabled={busy} aria-label="New chat"><Plus className="h-3.5 w-3.5" /></Button>
+        {chatId && <Button size="sm" variant="ghost" onClick={() => void deleteChat()} disabled={busy} aria-label="Delete chat"><Trash2 className="h-3.5 w-3.5" /></Button>}
+        <select aria-label="Model" value={model} onChange={(event) => setModel(event.target.value)} disabled={busy} className="ml-auto h-8 max-w-[14rem] rounded-lg border border-border bg-background px-2 text-sm">
           {models.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
         </select>
         <select
           aria-label="What Antigravity may do"
           value={mode}
           onChange={(event) => setMode(event.target.value as AgyMode)}
-          disabled={isStreaming}
+          disabled={busy}
           className={`h-8 max-w-[18rem] rounded-lg border bg-background px-2 text-xs ${mode === 'auto' ? 'border-amber-500 text-amber-500' : 'border-border'}`}
           title="Antigravity run from here has no one to ask, so what it may do is decided before each message."
         >
@@ -267,7 +302,7 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
       {showAllowed && <AgyAllowedCommands onClose={() => setShowAllowed(false)} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {items.length === 0 && !isStreaming && (
+        {items.length === 0 && !busy && (
           <p className="mx-auto mt-10 max-w-md text-center text-sm text-muted-foreground">
             Ask Antigravity about <strong>{selectedProject.displayName}</strong>. It works in <code>{selectedProject.fullPath}</code>.
             {mode === 'accept-edits' && ' It reads and edits files with its built-in tools. Shell commands are off (only exact commands on your Allowed commands list run).'}
@@ -315,6 +350,12 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
               Antigravity is working… {stepsThisTurn > 0 ? `${stepsThisTurn} step${stepsThisTurn === 1 ? '' : 's'} · ` : ''}{elapsedSeconds}s
             </div>
           )}
+          {serverRunning && !isStreaming && (
+            <div role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Antigravity is still working on your last message. It keeps going if you leave this page, and the reply appears here when it is done.
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -337,7 +378,7 @@ export default function AgyChatPanel({ selectedProject }: AgyChatPanelProps) {
             aria-label="Message"
             className="max-h-40 min-h-[3rem] flex-1 resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           />
-          {isStreaming ? (
+          {busy ? (
             <Button onClick={stop} variant="outline" aria-label="Stop"><Square className="h-4 w-4" /></Button>
           ) : (
             <Button onClick={() => void send()} disabled={!input.trim()} aria-label="Send"><Send className="h-4 w-4" /></Button>

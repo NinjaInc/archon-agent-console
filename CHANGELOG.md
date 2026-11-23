@@ -38,6 +38,7 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 * *Settings → About* now shows the banner, what the console does (including the Local LLM) and screenshots
 * README and screenshots retaken from the current UI
 * the ArtCraft installer no longer registers the servers globally
+* **Agy Chat turns now survive a disconnect.** A turn belongs to the chat, not to the browser connection: switching tabs, reloading, a sleeping laptop or a tunnel hiccup no longer kills Agy and loses the reply. It keeps running, is saved when it ends, and the page shows "still working" and picks the reply up. Only Stop cancels a turn
 
 ### Removed
 
