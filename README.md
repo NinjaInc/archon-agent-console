@@ -110,6 +110,31 @@ OLLAMA_BASE_URL=http://<ollama-host>:11434
 
 The address must be on this machine or a private network; public hosts are refused. Ollama itself has no login, so keep it LAN-only: do not publish it through a tunnel or port forward.
 
+### Web search (optional)
+
+A **Web search** page (in the sidebar, under Skills) searches the web through a private [SearXNG](https://github.com/searxng/searxng) that this server runs for itself, so there is no per-query cost and no account. Press **Answer with sources** and the local model reads the top pages and writes a short answer with numbered, clickable citations, a small private take on a research assistant. It is a draft, built only from the pages it lists.
+
+![Web search: a cited answer from the local model above the raw results](docs/images/web-search.webp)
+
+```bash
+scripts/install-searxng.sh            # no Docker, no root; listens on 127.0.0.1:8888 only, capped at 450 MB
+scripts/install-searxng.sh --status   # is it running, and does a test search work
+```
+
+Claude Code and Antigravity can use the same search as two **read-only** tools, `web_search` and `web_read` (about 600 tokens of tool definitions). Turn them on only where you want them, as with ArtCraft:
+
+```bash
+npm run build                                          # once: the tools run the compiled search code
+scripts/search-tool.sh on --project ~/projects/site    # Claude, for one project
+scripts/search-tool.sh on --agy                        # Antigravity
+scripts/search-tool.sh status                          # where it is on
+```
+
+- **Queries leave the machine, so they are checked first.** Anything that looks like a secret (keys, tokens, passwords, `NAME=value`) is refused before it is sent to a public search engine.
+- **The page reader only goes to the public internet.** Private and local addresses, other protocols and unusual ports are refused, every address a name resolves to is checked at connect time (so DNS tricks cannot slip past), redirects are re-checked at each hop, and a page is cut at 1.5 MB (decompressed size counts) and 10 seconds.
+- **Page text is untrusted.** Scripts, navigation, forms and anything hidden from a reader (the usual place to hide instructions for a model) are dropped, and results and answers are labelled as untrusted web content. Nothing here writes a file or runs a command.
+- **Answers need the local model** (the Local LLM section above). Search and previews work without it.
+
 ### Prod Claude (optional)
 
 If a second machine (for example your production Docker host) runs its own Claude Code, the **Prod Claude** tab opens a terminal to it from the console. It is deliberately kept apart from this server's agents:
@@ -208,6 +233,7 @@ Enable lingering (`loginctl enable-linger $USER`) to start it at boot. For a ded
 | `GITHUB_CLONE_ROOT` | Where *GitHub repos* clones to, as `<root>/<owner>/<name>` (default `~/projects`). |
 | `AGY_NOTIFY_MIN_SECONDS` | Agy Chat only sends a push notification for replies at least this long (default 20). Errors always notify. |
 | `VAPID_SUBJECT` | Who push services see as the sender. Defaults to `APP_ORIGIN` (https). |
+| `SEARXNG_URL` | Where the private search service listens (default `http://127.0.0.1:8888`). Must be on this machine or a private network. |
 | `OLLAMA_BASE_URL` | Turns the **Local LLM** tab on. Address of an Ollama server on this machine or a private network, e.g. `http://<ollama-host>:11434`. Public hosts are refused. |
 | `OLLAMA_MODEL` | Default local model (default `qwen3:8b`). The picker lists whatever Ollama has installed. |
 | `OLLAMA_TIMEOUT_MS` | How long to wait for the first token, covering a cold model load (default `120000`). |

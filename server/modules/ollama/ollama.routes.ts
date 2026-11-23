@@ -1,9 +1,8 @@
 import express from 'express';
 
-import { AppError } from '@/shared/utils.js';
+import { AppError, findSecrets } from '@/shared/utils.js';
 
 import { inputBudgetChars, prepareDiff, tooLargeError, type PreparedDiff } from './ollama.diff.js';
-import { findSecrets } from './ollama.secret-guard.js';
 import { CHAT_SYSTEM, TASKS, isTaskName, wrapInput } from './ollama.tasks.js';
 import type { ChatMessage, OllamaError, OllamaEvent, OllamaService } from './ollama.service.js';
 

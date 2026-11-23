@@ -27,6 +27,7 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 * `scripts/craft-mcp.sh`: switch the ArtCraft MCP servers on or off per project, so they cost nothing until needed (a fresh chat dropped from about 62k to 27k prompt tokens)
 * Archon Tech branding, PWA icons, a "More" menu for plugin tools, and a new tab order (chats together, terminals together)
 * **Local LLM** tab: a small model on your own hardware via Ollama (default `qwen3:8b`) for draft-only chat and four task shortcuts (`/summarise-logs`, `/explain-diff`, `/commit-msg`, `/boilerplate`). No tools; secrets are refused before sending; diffs drop lockfiles, `.env` files and binaries; anything that does not fit the 8k window is refused, not cut. Health dot, cold-start and idle timeouts, warm-up, and an ask-first fallback to Claude Chat when the host is offline
+* **Web search**: a private SearXNG run as a loopback-only user service (`scripts/install-searxng.sh`, no Docker), a Web search page with safe page previews and cited answers from the local model, and two read-only agent tools (`web_search`, `web_read`) for Claude Code and Antigravity switched on per project with `scripts/search-tool.sh`. Queries are refused if they look like secrets; the page reader fetches public addresses only (checked at connect time, redirects re-checked, size and time capped, hidden text dropped)
 * `scripts/git-hooks/append-coauthor.sh`: an optional `prepare-commit-msg` helper that adds a `Co-Authored-By` trailer exactly once
 
 ### Changed

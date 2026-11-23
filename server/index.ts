@@ -69,6 +69,7 @@ import { githubReposRoutes } from './modules/github-repos/index.js';
 import { skillsImportRoutes } from './modules/skills-import/index.js';
 import { agyChatRoutes } from './modules/agy-chat/index.js';
 import { ollamaRoutes } from './modules/ollama/index.js';
+import { webSearchRoutes } from './modules/web-search/index.js';
 import { cfAccessGate, isCfAccessRequired, verifyCfAccessUpgrade } from './modules/cf-access/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
@@ -250,6 +251,9 @@ app.use('/api/agy-chat', authenticateToken, agyChatRoutes);
 
 // Local (Ollama) model on the LAN: draft-only chat and task shortcuts, no tools (protected)
 app.use('/api/ollama', authenticateToken, ollamaRoutes);
+
+// Web search through a private SearXNG, page reading and cited answers (protected, read-only)
+app.use('/api/search', authenticateToken, webSearchRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);

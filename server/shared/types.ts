@@ -1830,3 +1830,59 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+// ---------------------------
+//----------------- WEB SEARCH ------------
+
+/**
+ * Settings for web search, read once from the environment by the web-search module.
+ * `problem` is set when SEARXNG_URL was refused; search then stays off and `searxngUrl` keeps the safe loopback default.
+ */
+export type WebSearchConfig = {
+  searxngUrl: string;
+  /** Why the settings were refused, if they were. Search stays off while this is set. */
+  problem?: string;
+  searchTimeoutMs: number;
+  /** How many result pages a cited answer reads, at most. */
+  maxSources: number;
+};
+
+/**
+ * One cleaned search hit: http(s) only, tracking parameters removed, text bounded. Produced by the web-search service from
+ * SearXNG's JSON and shown by the console's Web search page and the agent tools. All fields are untrusted web content.
+ */
+export type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+  engines: string[];
+  /** Publication date (YYYY-MM-DD) when the engine reported one. */
+  published?: string;
+};
+
+/**
+ * The outcome of one search: the cleaned query that was sent, the de-duplicated hits, any direct answers the engines
+ * offered, and the names of engines that did not respond (so a thin result set can be explained).
+ */
+export type WebSearchResponse = {
+  query: string;
+  results: WebSearchResult[];
+  answers: string[];
+  unresponsive: string[];
+};
+
+/** Readable text and title extracted from a page. `truncated` is true when the text was cut at the character limit. */
+export type WebPageText = { title: string; text: string; truncated: boolean };
+
+/** A page read through the guarded reader: its extracted text plus the final address after redirects. */
+export type WebReadResult = WebPageText & { url: string };
+
+/**
+ * A page as fetched, before text extraction: the final address after redirects, status, content type, decoded body (never
+ * more than the byte limit) and whether the body was cut.
+ */
+export type WebFetchedPage = { url: string; status: number; contentType: string; text: string; truncated: boolean };
+
+/** One numbered source in a cited answer: `n` is the number the model cites as [n], `text` the page text it may use. */
+export type WebAnswerSource = { n: number; title: string; url: string; text: string };
+

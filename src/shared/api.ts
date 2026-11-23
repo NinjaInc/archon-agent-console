@@ -275,6 +275,15 @@ export const api = {
     task: (name: string, body: { text?: string; projectId?: string; model?: string; think?: boolean }, signal?: AbortSignal) =>
       authenticatedFetch(`/api/ollama/tasks/${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(body), signal }),
   },
+  // Web search through the private SearXNG. `answer` streams a cited local-model answer as Server-Sent Events (raw Response).
+  webSearch: {
+    status: () => get('/api/search/status'),
+    search: (q: string, options: { limit?: number; category?: string; timeRange?: string } = {}) =>
+      get(`/api/search${query({ q, limit: options.limit, category: options.category, time_range: options.timeRange })}`),
+    read: (url: string) => post('/api/search/read', { url }),
+    answer: (body: { query: string; sources?: number; model?: string; think?: boolean }, signal?: AbortSignal) =>
+      authenticatedFetch('/api/search/answer', { method: 'POST', body: JSON.stringify(body), signal }),
+  },
   // Whether the Prod Claude terminal (ssh to the production host's own Claude Code) is set up.
   prodClaude: {
     status: () => get('/api/prod-claude/status'),

@@ -1,4 +1,4 @@
-import { Settings, ArrowUpCircle, AlertTriangle, FolderGit2, Rocket, BookOpen } from 'lucide-react';
+import { Settings, ArrowUpCircle, AlertTriangle, FolderGit2, Rocket, BookOpen, Search } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { IS_PLATFORM } from '@/shared/utils';
@@ -118,6 +118,10 @@ export default function SidebarFooter({
             <BookOpen className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate text-sm">Skills</span>
           </button>
+          <button type="button" className={toolButtonClass(activeTab === 'search')} onClick={() => onSelectTab('search')}>
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate text-sm">Web search</span>
+          </button>
         </div>
 
       {/* Desktop settings */}
@@ -158,6 +162,10 @@ export default function SidebarFooter({
           <button type="button" className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]" onClick={() => onSelectTab('skills')}>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-normal text-foreground">Skills</span>
+          </button>
+          <button type="button" className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]" onClick={() => onSelectTab('search')}>
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-normal text-foreground">Web search</span>
           </button>
         </div>
 

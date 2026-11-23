@@ -24,7 +24,9 @@ export const STATUS_POLL_MS = 30_000;
  * keep asking), and `refresh()` forces a live check, for the "Check again" button.
  */
 export function useOllamaStatus(): OllamaStatus & { refresh: () => Promise<void> } {
+  // The last status the server reported (configured, up or down, models); polled so the tab and its dot stay current.
   const [state, setState] = useState<OllamaStatus>(EMPTY);
+  // True after unmount, so a late response does not set state on a gone component.
   const cancelled = useRef(false);
 
   const load = useCallback(async (fresh: boolean) => {

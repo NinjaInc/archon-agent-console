@@ -38,7 +38,7 @@ export class OllamaError extends AppError {
 
 /** One normalised event streamed to the browser. */
 export type OllamaEvent =
-  | { type: 'meta'; task?: string; included?: string[]; excluded?: { path: string; reason: string }[]; draft: true }
+  | { type: 'meta'; task?: string; included?: string[]; excluded?: { path: string; reason: string }[]; sources?: Array<{ n: number; title: string; url: string }>; draft: true }
   | { type: 'status'; state: 'loading' | 'generating'; message?: string }
   | { type: 'reasoning'; text: string }
   | { type: 'text'; text: string }

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 
 import { test } from 'vitest';
 
-import { parseSlashCommand, readEventStream, selectHistory, suggestCommands, type OllamaStreamEvent } from '@/modules/ollama/utils/ollamaChat';
+import { parseSlashCommand, readEventStream, selectHistory, suggestCommands } from '@/modules/ollama/utils/ollamaChat';
+import type { OllamaStreamEvent } from '@/shared/types';
 
 test('slash commands: a known task with and without text, an unknown command, and plain chat', () => {
   assert.deepEqual(parseSlashCommand('/commit-msg'), { kind: 'task', name: 'commit-msg', text: '' });

@@ -69,7 +69,7 @@ export type ProviderModelActions = {
 //----------------- PROJECTS AND SESSIONS ------------
 
 /** Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id. */
-export type AppTab = 'chat' | 'files' | 'shell' | 'agy' | 'prod' | 'agy-chat' | 'local' | 'git' | 'tasks' | 'browser' | 'github' | 'launcher' | 'skills' | `plugin:${string}`;
+export type AppTab = 'chat' | 'files' | 'shell' | 'agy' | 'prod' | 'agy-chat' | 'local' | 'git' | 'tasks' | 'browser' | 'github' | 'launcher' | 'skills' | 'search' | `plugin:${string}`;
 
 /** A message queued to be sent to a session at a future time. */
 export type ScheduledMessage = {
@@ -2007,3 +2007,38 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+//----------------- WEB SEARCH ------------
+
+/** One cleaned search hit as returned by /api/search: an http(s) address with bounded text. Shown by the Web search page; all fields are untrusted web content. */
+export type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+  engines: string[];
+  /** Publication date (YYYY-MM-DD) when the engine reported one. */
+  published?: string;
+};
+
+/** A numbered source behind a cited answer: the answer text refers to it as [n]. Used to link citations and to list the sources under the answer. */
+export type WebAnswerSource = { n: number; title: string; url: string };
+
+// ---------------------------
+//----------------- LOCAL MODEL STREAM ------------
+
+/**
+ * One event of a Server-Sent Events reply from the local model (the Local LLM tab, its task shortcuts, and cited web answers).
+ * `meta` arrives first and carries the draft marker plus, depending on the request, the files used or left out of a diff, or the
+ * numbered web sources; `status` reports loading or generating; `reasoning` and `text` are streamed tokens; `usage` is the final
+ * count and speed; `error` ends the reply with a message the user can act on; `done` closes the stream.
+ */
+export type OllamaStreamEvent =
+  | { type: 'meta'; task?: string; included?: string[]; excluded?: Array<{ path: string; reason: string }>; sources?: WebAnswerSource[]; draft: true }
+  | { type: 'status'; state: 'loading' | 'generating'; message?: string }
+  | { type: 'reasoning'; text: string }
+  | { type: 'text'; text: string }
+  | { type: 'usage'; inputTokens: number; outputTokens: number; tokensPerSecond?: number }
+  | { type: 'error'; code: string; message: string }
+  | { type: 'done' };
+

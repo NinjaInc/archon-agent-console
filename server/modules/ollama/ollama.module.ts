@@ -5,6 +5,7 @@ import { projectsDb } from '@/modules/database/index.js';
 import { AppError, DENIED_PATHS, WORKSPACE_ROOTS, resolvePathUnderRoots } from '@/shared/utils.js';
 
 import { loadOllamaConfig } from './ollama.config.js';
+import { inputBudgetChars } from './ollama.diff.js';
 import { createOllamaRouter } from './ollama.routes.js';
 import { createOllamaService } from './ollama.service.js';
 
@@ -33,6 +34,18 @@ async function readGitDiff(directory: string, staged: boolean): Promise<string> 
     throw new AppError('Could not read the git diff here. Is this project a git repository with at least one commit?', { code: 'OLLAMA_BAD_REQUEST', statusCode: 422 });
   }
 }
+
+/**
+ * The one Ollama service (and its health poll), shared so other modules do not start a second poller.
+ * Used by the web-search module to stream cited answers from the local model.
+ */
+export const ollamaService = service;
+
+/** True when OLLAMA_BASE_URL is set and valid. Used by the web-search module to decide whether cited answers are available. */
+export const ollamaEnabled = enabled;
+
+/** Character budget of the model's context window (inputs beyond it are refused, never cut). Used by the web-search module to size answer prompts. */
+export const ollamaInputBudgetChars = inputBudgetChars(config.numCtx);
 
 /** Local (Ollama) router assembled for the authenticated server mount. */
 export const ollamaRoutes = createOllamaRouter({

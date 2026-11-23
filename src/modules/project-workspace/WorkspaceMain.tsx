@@ -10,6 +10,7 @@ import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { AgentLauncherPanel } from '@/modules/agent-launcher';
 import { AgyChatPanel } from '@/modules/agy-chat';
 import { OllamaPanel, useOllamaStatus } from '@/modules/ollama';
+import { WebSearchPanel } from '@/modules/web-search';
 import { ProdClaudePanel, useProdClaudeStatus } from '@/modules/prod-claude';
 import { GithubReposPanel } from '@/modules/github-repos';
 import { SkillsImportPanel } from '@/modules/skills-import';
@@ -152,6 +153,11 @@ function WorkspaceMain({
   // Skills import is a full page too; "this project only" uses the selected project when there is one.
   if (activeTab === 'skills') {
     return <SkillsImportPanel selectedProject={selectedProject} />;
+  }
+
+  // Web search is a full page that needs no project: search, preview a page, or get a cited answer from the local model.
+  if (activeTab === 'search') {
+    return <WebSearchPanel />;
   }
 
   // The agent launcher is a full page that works without a selected project too.

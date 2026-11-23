@@ -3,7 +3,7 @@ import { Check, Copy, Cpu, Loader2, RefreshCw, Send, Square, Trash2 } from 'luci
 
 import { api, readApiJson } from '@/shared/api';
 import { Button } from '@/shared/ui';
-import type { Project } from '@/shared/types';
+import type { OllamaStreamEvent, Project } from '@/shared/types';
 import { Markdown } from '@/modules/chat';
 import { blockRemoteImages } from '@/modules/agy-chat';
 import type { OllamaStatus } from '@/modules/ollama/hooks/useOllamaStatus';
@@ -14,7 +14,6 @@ import {
   selectHistory,
   suggestCommands,
   type HistoryItem,
-  type OllamaStreamEvent,
   type TaskName,
 } from '@/modules/ollama/utils/ollamaChat';
 
@@ -41,20 +40,35 @@ type OllamaPanelProps = {
 
 /** Rendered by WorkspaceMain for the Local LLM tab: draft-only chat and task shortcuts on the Ollama model, with no tools. */
 export default function OllamaPanel({ selectedProject, ollama, onOpenClaudeChat }: OllamaPanelProps) {
+  // The conversation shown on screen (in browser memory only, by design): user, draft, notice and error items in order.
   const [items, setItems] = useState<Item[]>([]);
+  // The text being typed, including a prefilled slash command waiting for pasted text.
   const [input, setInput] = useState('');
+  // The model chosen in the picker; defaults to the server's configured model once the host's list arrives.
   const [model, setModel] = useState('');
+  // The Thinking toggle: off by default because reasoning is slower; sent with each request.
   const [think, setThink] = useState(false);
+  // Where an in-flight request is (sending, loading the model, generating); null when idle. Drives the status line and disables sending.
   const [phase, setPhase] = useState<Phase>(null);
+  // Progress of the warm-up ping sent when the tab opens, shown as a small hint on the empty screen.
   const [warm, setWarm] = useState<'idle' | 'warming' | 'ready' | 'failed'>('idle');
+  // The message that could not be sent because the host went offline, so "Use Claude Chat instead" can copy it.
   const [offlineText, setOfflineText] = useState('');
+  // Which draft just had Copy pressed, to confirm it briefly.
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Seconds since the request started, so a cold model load visibly progresses.
   const [elapsed, setElapsed] = useState(0);
+  // The in-flight request, so Stop and leaving the tab cancel it (the server then stops the model).
   const abortRef = useRef<AbortController | null>(null);
+  // Marks the end of the conversation so new content scrolls into view.
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // The message box, focused after a shortcut prefills it.
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Id of the draft currently being streamed into, kept outside state so streamed tokens always append to the same item.
   const assistantRef = useRef<string | null>(null);
+  // The model last warmed up, so the warm-up ping is sent once per model (and again after the host returns).
   const warmedRef = useRef<string | null>(null);
+  // A counter for unique ids of items created on this screen.
   const counter = useRef(0);
   const nextId = () => `local-${counter.current++}`;
 

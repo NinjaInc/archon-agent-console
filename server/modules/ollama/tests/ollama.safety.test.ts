@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AppError } from '@/shared/utils.js';
+import { AppError, findSecrets } from '@/shared/utils.js';
 
 import { classifyPath, inputBudgetChars, prepareDiff } from '../ollama.diff.js';
-import { findSecrets } from '../ollama.secret-guard.js';
 
 // ---- secret guard ------------------------------------------------------------------------------------------------
 

@@ -1045,7 +1045,7 @@ export function useProjectsState({
       setSelectedSession(null);
       navigate('/');
       // Picking a project leaves the full-page GitHub repositories view.
-      setActiveTab((current) => (current === 'github' || current === 'launcher' || current === 'skills' ? 'chat' : current));
+      setActiveTab((current) => (current === 'github' || current === 'launcher' || current === 'skills' || current === 'search' ? 'chat' : current));
 
       if (isMobile) {
         setSidebarOpen(false);
@@ -1059,7 +1059,7 @@ export function useProjectsState({
       clearSessionAttention(session.id);
       setSelectedSession(session);
 
-      if (activeTab === 'tasks' || activeTab === 'browser' || activeTab === 'github' || activeTab === 'launcher' || activeTab === 'skills') {
+      if (activeTab === 'tasks' || activeTab === 'browser' || activeTab === 'github' || activeTab === 'launcher' || activeTab === 'skills' || activeTab === 'search') {
         setActiveTab('chat');
       }
 

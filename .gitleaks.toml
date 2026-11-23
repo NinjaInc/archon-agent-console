@@ -14,7 +14,6 @@ paths = [
   '''^dist/''',
   '''^dist-server/''',
   '''^src/modules/i18n/locales/''',
-  '''^server/modules/ollama/ollama\.secret-guard\.ts$''',
   '''^server/modules/ollama/tests/ollama\.safety\.test\.ts$''',
   '''^server/modules/settings/tests/settings\.service\.test\.ts$''',
   '''^src/modules/settings/tests/notificationWebhookCard\.test\.tsx$''',

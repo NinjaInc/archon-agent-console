@@ -1,3 +1,5 @@
+import type { OllamaStreamEvent } from '@/shared/types';
+
 export const TASKS = [
   { name: 'summarise-logs', label: 'Summarise logs', needsText: true, hint: 'Paste log output after the command' },
   { name: 'explain-diff', label: 'Explain diff', needsText: false, hint: 'Explains the git changes in this project (or a diff you paste)' },
@@ -6,15 +8,6 @@ export const TASKS = [
 ] as const;
 
 export type TaskName = (typeof TASKS)[number]['name'];
-
-export type OllamaStreamEvent =
-  | { type: 'meta'; task?: string; included?: string[]; excluded?: Array<{ path: string; reason: string }>; draft: true }
-  | { type: 'status'; state: 'loading' | 'generating'; message?: string }
-  | { type: 'reasoning'; text: string }
-  | { type: 'text'; text: string }
-  | { type: 'usage'; inputTokens: number; outputTokens: number; tokensPerSecond?: number }
-  | { type: 'error'; code: string; message: string }
-  | { type: 'done' };
 
 /** "/commit-msg", "/summarise-logs <pasted text>" -> the task and the text after it. Anything else is plain chat. */
 export function parseSlashCommand(input: string): { kind: 'task'; name: TaskName; text: string } | { kind: 'unknown'; command: string } | { kind: 'chat' } {
@@ -53,7 +46,10 @@ export function selectHistory(items: HistoryItem[], maxChars: number): { message
   return { messages: kept.map((item) => ({ role: item.role, content: item.text })), trimmed: kept.length < items.length };
 }
 
-/** Reads a Server-Sent Events body, handing each `data:` payload to `onEvent` as it arrives (nothing is held back). */
+/**
+ * Reads a Server-Sent Events body, handing each `data:` payload to `onEvent` as it arrives (nothing is held back).
+ * Used by the ollama module for chats and tasks, and by the web-search module (through the ollama barrel) for cited answers.
+ */
 export async function readEventStream(response: Response, onEvent: (event: OllamaStreamEvent) => void): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) return;
