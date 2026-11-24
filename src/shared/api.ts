@@ -258,6 +258,7 @@ export const api = {
   // Antigravity (agy) chats. `send` answers with a Server-Sent Events stream, so it returns the raw Response.
   agyChat: {
     models: () => get('/api/agy-chat/models'),
+    usage: () => get('/api/agy-chat/usage'),
     list: (projectId: string) => get(`/api/agy-chat${query({ projectId })}`),
     create: (projectId: string, model?: string) => post('/api/agy-chat', { projectId, model }),
     get: (chatId: string) => get(`/api/agy-chat/${encodeURIComponent(chatId)}`),

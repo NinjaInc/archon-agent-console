@@ -1886,3 +1886,13 @@ export type WebFetchedPage = { url: string; status: number; contentType: string;
 /** One numbered source in a cited answer: `n` is the number the model cites as [n], `text` the page text it may use. */
 export type WebAnswerSource = { n: number; title: string; url: string; text: string };
 
+
+//----------------- AGY USAGE ------------
+
+/** One remaining-allowance reading from Antigravity. Used by the agy-chat module (parser, route) and, mirrored, by the Agy Chat panel. */
+export type AgyUsageLimit = {
+  family: string;
+  window: 'weekly' | 'five-hour';
+  remainingPercent: number;
+  resetsAt: string | null;
+};

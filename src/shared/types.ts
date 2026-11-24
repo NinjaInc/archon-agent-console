@@ -2042,3 +2042,13 @@ export type OllamaStreamEvent =
   | { type: 'error'; code: string; message: string }
   | { type: 'done' };
 
+
+//----------------- AGY USAGE ------------
+
+/** Remaining Antigravity allowance for one model family and window, as the server reports it. Used by the Agy Chat panel's usage chips. */
+export type AgyUsageLimit = {
+  family: string;
+  window: 'weekly' | 'five-hour';
+  remainingPercent: number;
+  resetsAt: string | null;
+};

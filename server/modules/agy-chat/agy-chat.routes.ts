@@ -1,11 +1,13 @@
 import express from 'express';
 
+import type { AgyUsageLimit } from '@/shared/types.js';
 import type { createAgyChatService } from './agy-chat.service.js';
 
 /** Thin Antigravity chat routes. Sending a message answers as a Server-Sent Events stream of normalised events. */
 export function createAgyChatRouter(
   service: ReturnType<typeof createAgyChatService>,
   listModels: () => Promise<string[]>,
+  listUsage: () => Promise<AgyUsageLimit[]>,
   /** Called once a turn ends, for the push notification. Never receives message text. */
   onTurnFinished?: (turn: { userId: number; chatId: string; status: string; seconds: number; steps: number; error?: string }) => void,
 ): express.Router {
@@ -14,6 +16,14 @@ export function createAgyChatRouter(
   router.get('/models', async (_req, res, next) => {
     try {
       res.json({ models: await listModels() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/usage', async (_req, res, next) => {
+    try {
+      res.json({ limits: await listUsage() });
     } catch (error) {
       next(error);
     }

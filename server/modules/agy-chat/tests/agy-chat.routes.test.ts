@@ -67,7 +67,7 @@ async function setup(script: () => AsyncGenerator<string>) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { (req as { user?: { id: number } }).user = { id: 1 }; next(); }); // the real server sets this from the passkey session
-  app.use('/chat', createAgyChatRouter(service, async () => ['m'], (turn) => { finished.push({ status: turn.status, chatId: turn.chatId }); }));
+  app.use('/chat', createAgyChatRouter(service, async () => ['m'], async () => [], (turn) => { finished.push({ status: turn.status, chatId: turn.chatId }); }));
   const server = await new Promise<import('node:http').Server>((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   closers.push(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/chat`;
