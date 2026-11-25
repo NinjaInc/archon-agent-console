@@ -8,8 +8,6 @@ import { DENIED_PATHS, WORKSPACE_ROOTS, resolvePathUnderRoots } from '@/shared/u
 import { createAgyChatRouter } from './agy-chat.routes.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createAgyChatService, summariseTurnForNotification } from './agy-chat.service.js';
-import { parseAgyUsage } from './agy-chat.usage.js';
-import type { AgyUsageLimit } from '@/shared/types.js';
 
 const run = promisify(execFile);
 const TURN_TIMEOUT_MS = 30 * 60_000;
@@ -60,22 +58,8 @@ async function listModels(): Promise<string[]> {
   return modelCache.models;
 }
 
-let usageCache: { at: number; limits: AgyUsageLimit[] } | null = null;
-
-/** Remaining allowance per model family from `agy -p=/usage` (cached a minute; empty when agy cannot answer). */
-async function listUsage(): Promise<AgyUsageLimit[]> {
-  if (usageCache && Date.now() - usageCache.at < 60_000) return usageCache.limits;
-  try {
-    const { stdout } = await run('agy', ['-p=/usage', '--print-timeout', '20s'], { timeout: 30_000, env: { ...process.env, NO_COLOR: '1' } });
-    usageCache = { at: Date.now(), limits: parseAgyUsage(stdout) };
-  } catch {
-    usageCache = { at: Date.now(), limits: [] };
-  }
-  return usageCache.limits;
-}
-
 /** Antigravity chat router assembled for the authenticated server mount. */
-export const agyChatRoutes = createAgyChatRouter(agyChatService, listModels, listUsage, (turn) => {
+export const agyChatRoutes = createAgyChatRouter(agyChatService, listModels, (turn) => {
   const summary = summariseTurnForNotification({ ...turn, minSeconds: Number(process.env.AGY_NOTIFY_MIN_SECONDS ?? 20) });
   if (!summary) return;
   const { chat } = agyChatService.getChat(turn.chatId);

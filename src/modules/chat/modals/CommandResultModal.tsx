@@ -26,6 +26,7 @@ import type {
   ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import { PlanUsageChips } from '@/modules/plan-usage';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -493,6 +494,9 @@ function CostContent({ data }: { data: CostCommandData }) {
           </div>
         </div>
       </div>
+
+      {/* Plan limits for both agents: Claude's and Antigravity's remaining allowance. */}
+      <PlanUsageChips />
     </div>
   );
 }

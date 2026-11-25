@@ -2043,10 +2043,11 @@ export type OllamaStreamEvent =
   | { type: 'done' };
 
 
-//----------------- AGY USAGE ------------
+//----------------- PLAN USAGE ------------
 
-/** Remaining Antigravity allowance for one model family and window, as the server reports it. Used by the Agy Chat panel's usage chips. */
-export type AgyUsageLimit = {
+/** Remaining allowance for one provider's model family and window. Used by the plan-usage server module and its usage chips. */
+export type PlanUsageLimit = {
+  provider: 'claude' | 'agy';
   family: string;
   window: 'weekly' | 'five-hour';
   remainingPercent: number;

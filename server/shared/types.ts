@@ -1887,10 +1887,11 @@ export type WebFetchedPage = { url: string; status: number; contentType: string;
 export type WebAnswerSource = { n: number; title: string; url: string; text: string };
 
 
-//----------------- AGY USAGE ------------
+//----------------- PLAN USAGE ------------
 
-/** One remaining-allowance reading from Antigravity. Used by the agy-chat module (parser, route) and, mirrored, by the Agy Chat panel. */
-export type AgyUsageLimit = {
+/** Remaining allowance for one provider's model family and window. Used by the plan-usage server module and its usage chips. */
+export type PlanUsageLimit = {
+  provider: 'claude' | 'agy';
   family: string;
   window: 'weekly' | 'five-hour';
   remainingPercent: number;

@@ -69,6 +69,7 @@ import { githubReposRoutes } from './modules/github-repos/index.js';
 import { skillsImportRoutes } from './modules/skills-import/index.js';
 import { agyChatRoutes } from './modules/agy-chat/index.js';
 import { ollamaRoutes, ollamaService } from './modules/ollama/index.js';
+import { planUsageRoutes } from './modules/plan-usage/index.js';
 import { createComfyuiModule } from './modules/comfyui/index.js';
 import { getGpuArbiter } from './modules/gpu-arbiter/index.js';
 import { webSearchRoutes } from './modules/web-search/index.js';
@@ -253,6 +254,9 @@ app.use('/api/agy-chat', authenticateToken, agyChatRoutes);
 
 // Local (Ollama) model on the LAN: draft-only chat and task shortcuts, no tools (protected)
 app.use('/api/ollama', authenticateToken, ollamaRoutes);
+
+// Remaining Claude and Antigravity plan allowance (protected, read-only)
+app.use('/api/usage', authenticateToken, planUsageRoutes);
 
 // Image generation on the desktop's ComfyUI, one GPU job at a time (protected)
 app.use('/api/images', authenticateToken, createComfyuiModule({ arbiter: getGpuArbiter(), unloadOllama: () => ollamaService.unload() }).comfyuiRoutes);

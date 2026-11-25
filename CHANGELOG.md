@@ -16,6 +16,8 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 
 ### Added
 
+- Claude and Antigravity plan limits (weekly and five-hour) in the token usage popup and the Agy Chat header.
+
 - Image generation API on a LAN ComfyUI, behind a GPU arbiter that yields to games on the desktop.
 
 * **Antigravity** terminal tab and **Agy Chat**: streamed replies, tool steps, saved history, model picker, Stop, three permission modes, live progress

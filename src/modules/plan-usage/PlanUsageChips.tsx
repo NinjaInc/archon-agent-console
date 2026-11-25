@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { api, readApiJson } from '@/shared/api';
-import type { AgyUsageLimit } from '@/shared/types';
+import type { PlanUsageLimit } from '@/shared/types';
 
 const REFRESH_MS = 120_000;
 
@@ -15,19 +15,19 @@ export function formatReset(resetsAt: string | null, now = Date.now()): string {
 }
 
 /**
- * Remaining Antigravity allowance per model family (weekly and five-hour). `refreshKey` changes when a turn ends,
- * so the numbers update right after you have used some.
- * Used by AgyChatPanel's header.
+ * Remaining Claude and Antigravity allowance (weekly and five-hour). `refreshKey` changes when a turn ends, so the
+ * numbers are asked for again right after you have used some.
+ * Used by AgyChatPanel's header and the chat module's cost popup.
  */
-export default function AgyUsageChips({ refreshKey }: { refreshKey: unknown }) {
+export default function PlanUsageChips({ refreshKey, className }: { refreshKey?: unknown; className?: string }) {
   // The latest limits the server reported; empty until the first answer or when agy cannot report.
-  const [limits, setLimits] = useState<AgyUsageLimit[]>([]);
+  const [limits, setLimits] = useState<PlanUsageLimit[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await readApiJson<{ limits: AgyUsageLimit[] }>(await api.agyChat.usage());
+        const data = await readApiJson<{ limits: PlanUsageLimit[] }>(await api.planUsage());
         if (!cancelled && Array.isArray(data.limits)) setLimits(data.limits);
       } catch {
         // Usage is a nicety; the chat works without it.
@@ -40,7 +40,7 @@ export default function AgyUsageChips({ refreshKey }: { refreshKey: unknown }) {
 
   if (limits.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-2 border-b border-border/60 px-3 py-1.5 text-xs text-muted-foreground" aria-label="Antigravity usage">
+    <div className={`flex flex-wrap gap-2 text-xs text-muted-foreground ${className ?? ''}`} aria-label="Plan usage">
       {limits.map((limit) => {
         const tone = limit.remainingPercent <= 15 ? 'text-red-500' : limit.remainingPercent <= 40 ? 'text-amber-500' : 'text-emerald-500';
         return (

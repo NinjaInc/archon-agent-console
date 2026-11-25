@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatReset } from '@/modules/agy-chat/AgyUsageChips';
+import { formatReset } from '@/modules/plan-usage/PlanUsageChips';
 
 describe('formatReset', () => {
   const now = Date.parse('2026-11-24T12:00:00Z');

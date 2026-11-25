@@ -258,7 +258,6 @@ export const api = {
   // Antigravity (agy) chats. `send` answers with a Server-Sent Events stream, so it returns the raw Response.
   agyChat: {
     models: () => get('/api/agy-chat/models'),
-    usage: () => get('/api/agy-chat/usage'),
     list: (projectId: string) => get(`/api/agy-chat${query({ projectId })}`),
     create: (projectId: string, model?: string) => post('/api/agy-chat', { projectId, model }),
     get: (chatId: string) => get(`/api/agy-chat/${encodeURIComponent(chatId)}`),
@@ -267,6 +266,8 @@ export const api = {
     send: (chatId: string, body: { text: string; model?: string; mode?: 'plan' | 'accept-edits' | 'auto' }, signal?: AbortSignal) =>
       authenticatedFetch(`/api/agy-chat/${encodeURIComponent(chatId)}/messages`, { method: 'POST', body: JSON.stringify(body), signal }),
   },
+  // Remaining Claude and Antigravity plan allowance.
+  planUsage: () => get('/api/usage'),
   // Local (Ollama) model on the LAN. `chat` and `task` answer with a Server-Sent Events stream, so they return the raw Response.
   ollama: {
     status: (fresh = false) => get(`/api/ollama/status${fresh ? '?fresh=1' : ''}`),
