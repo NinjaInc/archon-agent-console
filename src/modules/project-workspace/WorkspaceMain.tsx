@@ -12,6 +12,7 @@ import { AgentLauncherPanel } from '@/modules/agent-launcher';
 import { AgyChatPanel } from '@/modules/agy-chat';
 import { ImagesPanel, useImagesStatus } from '@/modules/images';
 import { OllamaPanel, useOllamaStatus } from '@/modules/ollama';
+import { PairPanel } from '@/modules/pair';
 import { WebSearchPanel } from '@/modules/web-search';
 import { ProdClaudePanel, useProdClaudeStatus } from '@/modules/prod-claude';
 import { GithubReposPanel } from '@/modules/github-repos';
@@ -272,6 +273,12 @@ function WorkspaceMain({
           {activeTab === 'agy-chat' && (
             <div className="h-full overflow-hidden">
               <AgyChatPanel key={selectedProject.projectId} selectedProject={selectedProject} />
+            </div>
+          )}
+
+          {activeTab === 'pair' && (
+            <div className="h-full overflow-hidden">
+              <PairPanel key={selectedProject.projectId} selectedProject={selectedProject} />
             </div>
           )}
 

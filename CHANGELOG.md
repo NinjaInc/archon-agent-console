@@ -16,6 +16,8 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 
 ### Added
 
+- Pair mode: Claude plans and reviews, Antigravity edits in a worktree, with an approval before editing and before any code runs.
+
 - Images tab with a GPU status pill; results can be downloaded.
 
 - Claude and Antigravity plan limits (weekly and five-hour) in the token usage popup and the Agy Chat header.

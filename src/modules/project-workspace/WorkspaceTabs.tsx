@@ -1,4 +1,4 @@
-import { Cpu, Folder, GitBranch, Image as ImageIcon, MessageSquare, MessageSquareText, MonitorPlay, Server, Sparkles, Terminal } from 'lucide-react';
+import { Cpu, Folder, GitBranch, GitPullRequest, Image as ImageIcon, MessageSquare, MessageSquareText, MonitorPlay, Server, Sparkles, Terminal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
@@ -33,9 +33,10 @@ type BuiltInTab = {
 
 
 const BASE_TABS: BuiltInTab[] = [
-  // The two chats first (Claude, then Antigravity), then the two code terminals, then the project views.
+  // The two chats first (Claude, then Antigravity), Pair, then the two code terminals, then the project views.
   { kind: 'builtin', id: 'chat',  labelKey: 'tabs.chat',  icon: MessageSquare },
   { kind: 'builtin', id: 'agy-chat', labelKey: 'tabs.agyChat', icon: MessageSquareText },
+  { kind: 'builtin', id: 'pair', labelKey: 'tabs.pair', defaultLabel: 'Pair', icon: GitPullRequest },
   { kind: 'builtin', id: 'shell', labelKey: 'tabs.shell', icon: Terminal },
   { kind: 'builtin', id: 'agy',   labelKey: 'tabs.agy',   icon: Sparkles },
   { kind: 'builtin', id: 'files', labelKey: 'tabs.files', icon: Folder },
@@ -70,11 +71,12 @@ export default function WorkspaceTabs({
 
   // Plugin tabs and Tasks live in the sidebar footer (SidebarFooter), not in this bar.
   // Prod Claude sits right after the two local terminals, so the three terminals stay together.
-  // Order: the chats (Claude, Agy, then the Local model and Images), the code terminals (+ Prod Claude), then the project views.
-  const [claudeChat, agyChat, claudeShell, agyShell, ...projectViews] = BASE_TABS;
+  // Order: the chats (Claude, Agy), Pair, then the Local model and Images, the code terminals (+ Prod Claude), then the project views.
+  const [claudeChat, agyChat, pairTab, claudeShell, agyShell, ...projectViews] = BASE_TABS;
   const tabs: BuiltInTab[] = [
     claudeChat,
     agyChat,
+    pairTab,
     ...(shouldShowLocalTab ? [LOCAL_TAB] : []),
     ...(shouldShowImagesTab ? [IMAGES_TAB] : []),
     claudeShell,

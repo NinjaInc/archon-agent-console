@@ -159,6 +159,16 @@ The key file lives on this server as the service user, so a compromised agent he
 Text-to-image on a LAN ComfyUI from the Images tab, one GPU job at a time. Set `COMFYUI_BASE_URL` (and optionally `COMFYUI_CHECKPOINT`) and `GPU_STATUS_URL`
 for the [desktop status service](scripts/desktop/README.md), so a game on that machine always wins. Private addresses only.
 
+### Pair mode
+
+The **Pair** tab has Claude and Antigravity work on one task: Claude writes a plan, you approve it, Antigravity edits in a separate git
+worktree, you approve the change, the project's tests run, and Claude reviews (at most two fix rounds, each approved again). **Keep**
+puts exactly the approved files on a local `pair/<id>` branch; nothing is merged or pushed, and uncommitted work is not included.
+
+Know before you approve: the tests run the changed code **as the console's user**, with memory and time limits but no file or network
+sandbox. Antigravity runs headless with `--sandbox`, so it cannot ask for new permissions, but commands you have already allowed it in
+Antigravity's settings still apply.
+
 ### Creative tools (optional, switched on per project)
 
 `scripts/install-craft-mcp.sh` installs [ArtCraft's Crafting Apps](https://getartcraft.com/apps) so Claude Code can edit **PSD, DOCX, XLSX, PDF, SVG, video and CAD files** on the server: PhotoCraft (Photoshop-style), WordCraft, DeckCraft, GridCraft, VectorCraft, PdfCraft, LightCraft, FilmCraft, DesignCraft, EffectCraft, CADCraft and SoundCraft. They are the vendor's own signed headless CLIs, not a third-party gateway. For each app the script verifies the signing key's pinned fingerprint, the SHA-256, both PGP signatures and the archive paths, then does a real MCP handshake. Everything installs under `~/.local/opt/artcraft`, with no root.

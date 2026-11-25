@@ -69,7 +69,7 @@ export type ProviderModelActions = {
 //----------------- PROJECTS AND SESSIONS ------------
 
 /** Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id. */
-export type AppTab = 'chat' | 'files' | 'shell' | 'agy' | 'prod' | 'agy-chat' | 'local' | 'images' | 'git' | 'tasks' | 'browser' | 'github' | 'launcher' | 'skills' | 'search' | `plugin:${string}`;
+export type AppTab = 'chat' | 'files' | 'shell' | 'agy' | 'prod' | 'agy-chat' | 'pair' | 'local' | 'images' | 'git' | 'tasks' | 'browser' | 'github' | 'launcher' | 'skills' | 'search' | `plugin:${string}`;
 
 /** A message queued to be sent to a session at a future time. */
 export type ScheduledMessage = {
@@ -2095,4 +2095,67 @@ export type GeneratedImageResult = {
   width: number;
   height: number;
   seed: number;
+};
+
+// ---------------------------
+
+//----------------- PAIR MODE ------------
+
+/** Lifecycle state of a Pair mode run on `/api/pair`, from initial planning through keeping a local branch or discarding. */
+export type PairStatus =
+  | 'planning'
+  | 'plan-ready'
+  | 'executing'
+  | 'diff-ready'
+  | 'testing'
+  | 'reviewing'
+  | 'done'
+  | 'kept'
+  | 'discarded'
+  | 'failed';
+
+/** Final review outcome reported on a finished Pair run (`done` / `kept`). */
+export type PairVerdict = 'ready' | 'needs-work' | 'unclear';
+
+/** Staged worktree diff snapshot awaiting approval or shown with a finished Pair run; `hash` binds approval to the exact reviewed tree. */
+export type PairDiffSnapshot = {
+  hash: string;
+  text: string;
+  files: string[];
+  hasSymlinks: boolean;
+};
+
+/** Pass/fail outcome and combined stdout/stderr tail from running a Pair run's detected test command. */
+export type PairTestResult = {
+  passed: boolean;
+  output: string;
+};
+
+/** Compact Pair run item returned by `GET /api/pair?projectId=` to populate the project's run picker. */
+export type PairRunSummary = {
+  id: string;
+  title: string;
+  status: PairStatus;
+  createdAt: string;
+  verdict?: PairVerdict;
+};
+
+/** Complete Pair mode run state returned by `/api/pair/:id` and Pair mutation endpoints. */
+export type PairRun = {
+  id: string;
+  projectId: string;
+  task: string;
+  model: string;
+  status: PairStatus;
+  createdAt: string;
+  round: number;
+  testCommand: string[] | null;
+  plan?: string;
+  agentNotes?: string;
+  diff?: PairDiffSnapshot;
+  tests?: PairTestResult;
+  review?: string;
+  verdict?: PairVerdict;
+  branch?: string;
+  error?: string;
 };

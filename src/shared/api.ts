@@ -267,6 +267,17 @@ export const api = {
     send: (chatId: string, body: { text: string; model?: string; mode?: 'plan' | 'accept-edits' | 'auto' }, signal?: AbortSignal) =>
       authenticatedFetch(`/api/agy-chat/${encodeURIComponent(chatId)}/messages`, { method: 'POST', body: JSON.stringify(body), signal }),
   },
+  // Pair mode runs: Claude plans, Antigravity edits in an isolated worktree, tests run after diff approval, and Claude reviews.
+  pair: {
+    list: (projectId: string) => get(`/api/pair${query({ projectId })}`),
+    start: (body: { projectId: string; task: string; model: string }) => post('/api/pair', body),
+    get: (id: string) => get(`/api/pair/${encodeURIComponent(id)}`),
+    approvePlan: (id: string) => post(`/api/pair/${encodeURIComponent(id)}/approve-plan`),
+    approveDiff: (id: string, hash: string) => post(`/api/pair/${encodeURIComponent(id)}/approve-diff`, { hash }),
+    keep: (id: string) => post(`/api/pair/${encodeURIComponent(id)}/keep`),
+    discard: (id: string) => post(`/api/pair/${encodeURIComponent(id)}/discard`),
+    stop: (id: string) => post(`/api/pair/${encodeURIComponent(id)}/stop`),
+  },
   // Remaining Claude and Antigravity plan allowance.
   planUsage: () => get('/api/usage'),
   // Local (Ollama) model on the LAN. `chat` and `task` answer with a Server-Sent Events stream, so they return the raw Response.

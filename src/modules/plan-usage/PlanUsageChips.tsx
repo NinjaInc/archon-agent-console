@@ -17,7 +17,7 @@ export function formatReset(resetsAt: string | null, now = Date.now()): string {
 /**
  * Remaining Claude and Antigravity allowance (weekly and five-hour). `refreshKey` changes when a turn ends, so the
  * numbers are asked for again right after you have used some.
- * Used by AgyChatPanel's header and the chat module's cost popup.
+ * Used by AgyChatPanel's header, PairPanel, and the chat module's cost popup.
  */
 export default function PlanUsageChips({ refreshKey, className }: { refreshKey?: unknown; className?: string }) {
   // The latest limits the server reported; empty until the first answer or when agy cannot report.

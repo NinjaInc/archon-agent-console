@@ -40,6 +40,10 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.agy');
   }
 
+  if (activeTab === 'pair') {
+    return t('tabs.pair');
+  }
+
   if (activeTab === 'prod') {
     return t('tabs.prod');
   }

@@ -79,3 +79,18 @@ test('shows the Images tab when configured and switches activeTab to images on c
   fireEvent.click(imagesTab);
   assert.equal(screen.getByTestId('active-tab').textContent, 'images');
 });
+
+test('places the Pair tab directly after Claude Chat and Agy Chat and activates pair on click', async () => {
+  mocks.status.mockResolvedValue(
+    Response.json({ configured: false, online: false, state: 'idle', leases: [] }),
+  );
+
+  render(<ImagesTabHarness />);
+
+  const tabs = await screen.findAllByRole('tab');
+  const labels = tabs.map((tab) => tab.getAttribute('aria-label'));
+  assert.deepEqual(labels.slice(0, 3), ['Claude Chat', 'Agy Chat', 'Pair']);
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Pair' }));
+  assert.equal(screen.getByTestId('active-tab').textContent, 'pair');
+});
