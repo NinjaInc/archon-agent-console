@@ -40,6 +40,13 @@ left open at its menu still counts), `games_running`, `launchers_running`, `top_
 If a source fails, that field is `null` and `errors` names it; the console treats an unreachable or failing service as "busy" for unattended
 jobs.
 
+## ComfyUI
+
+ComfyUI usually shows up as `python.exe`, so it is on the example `ours` list; otherwise its VRAM would count as "something else". If you
+run other Python GPU work on the desktop, it will count as ours too.
+
+On the console, set `GPU_STATUS_URL=http://<desktop>:9199/gpu` and `COMFYUI_BASE_URL=http://<desktop>:8188` (private addresses only).
+
 ## Tests
 
 ```bash

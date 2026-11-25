@@ -68,7 +68,9 @@ import { getProdClaudeLaunch, prodClaudeRoutes } from './modules/prod-claude/ind
 import { githubReposRoutes } from './modules/github-repos/index.js';
 import { skillsImportRoutes } from './modules/skills-import/index.js';
 import { agyChatRoutes } from './modules/agy-chat/index.js';
-import { ollamaRoutes } from './modules/ollama/index.js';
+import { ollamaRoutes, ollamaService } from './modules/ollama/index.js';
+import { createComfyuiModule } from './modules/comfyui/index.js';
+import { getGpuArbiter } from './modules/gpu-arbiter/index.js';
 import { webSearchRoutes } from './modules/web-search/index.js';
 import { cfAccessGate, isCfAccessRequired, verifyCfAccessUpgrade } from './modules/cf-access/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
@@ -251,6 +253,9 @@ app.use('/api/agy-chat', authenticateToken, agyChatRoutes);
 
 // Local (Ollama) model on the LAN: draft-only chat and task shortcuts, no tools (protected)
 app.use('/api/ollama', authenticateToken, ollamaRoutes);
+
+// Image generation on the desktop's ComfyUI, one GPU job at a time (protected)
+app.use('/api/images', authenticateToken, createComfyuiModule({ arbiter: getGpuArbiter(), unloadOllama: () => ollamaService.unload() }).comfyuiRoutes);
 
 // Web search through a private SearXNG, page reading and cited answers (protected, read-only)
 app.use('/api/search', authenticateToken, webSearchRoutes);

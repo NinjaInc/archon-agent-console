@@ -1,5 +1,5 @@
 {
-  "ours": ["ollama.exe", "ollama app.exe", "ollama_llama_server.exe", "llama-server.exe"],
+  "ours": ["python.exe", "ollama.exe", "ollama app.exe", "ollama_llama_server.exe", "llama-server.exe"],
   "game_processes": ["eldenring.exe", "cyberpunk2077.exe", "valorant-win64-shipping.exe"],
   "launcher_processes": ["steam.exe", "steamwebhelper.exe", "epicgameslauncher.exe", "battle.net.exe", "galaxyclient.exe", "eadesktop.exe", "upc.exe"]
 }

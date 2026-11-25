@@ -283,3 +283,15 @@ test('parsers ignore noise and map in-stream errors', () => {
   const tokensPerSecond = parseNativeLine('{"done":true,"eval_count":42,"eval_duration":1000000000,"prompt_eval_count":5}', 'm')[0];
   assert.deepEqual(tokensPerSecond, { type: 'usage', inputTokens: 5, outputTokens: 42, tokensPerSecond: 42 });
 });
+
+test('unload asks for every loaded model to be released, and does nothing when Ollama cannot be reached', async () => {
+  const posted: unknown[] = [];
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith('/api/ps')) return Response.json({ models: [{ name: 'a:1' }, { name: 'b:2' }] });
+    posted.push(JSON.parse(String(init?.body)));
+    return Response.json({});
+  }) as typeof fetch;
+  await createOllamaService({ config: baseConfig('http://127.0.0.1:1'), fetchImpl }).unload();
+  assert.deepEqual(posted, [{ model: 'a:1', keep_alive: 0 }, { model: 'b:2', keep_alive: 0 }]);
+  await createOllamaService({ config: baseConfig('http://127.0.0.1:1') }).unload();
+});

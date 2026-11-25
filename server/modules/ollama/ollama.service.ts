@@ -218,6 +218,20 @@ export function createOllamaService({ config, fetchImpl = fetch, now = Date.now,
     }
   }
 
+  /** Frees the GPU before an image job: asks Ollama to unload every loaded model. Does nothing when it cannot be reached. */
+  async function unload(): Promise<void> {
+    if (!config.configured || config.problem) return;
+    for (const model of (await loadedModels()) ?? []) {
+      const response = await fetchImpl(url('/api/generate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, keep_alive: 0 }),
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS * 3),
+      });
+      if (!response.ok) throw new Error(`Ollama would not unload ${model}`);
+    }
+  }
+
   function resolveModel(requested: string | undefined): string {
     const model = requested && requested.trim() ? requested.trim() : config.model;
     if (health.models.length > 0 && !health.models.some((entry) => entry.name === model)) {
@@ -353,7 +367,7 @@ export function createOllamaService({ config, fetchImpl = fetch, now = Date.now,
     return () => clearInterval(interval);
   }
 
-  return { checkHealth, ensureOnline, getStatus, getHealth: () => health, warmUp, streamChat, startHealthPolling, activeStreams: () => active };
+  return { checkHealth, ensureOnline, getStatus, getHealth: () => health, warmUp, unload, streamChat, startHealthPolling, activeStreams: () => active };
 }
 
 export type OllamaService = ReturnType<typeof createOllamaService>;

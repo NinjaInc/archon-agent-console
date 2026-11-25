@@ -16,6 +16,8 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 
 ### Added
 
+- Image generation API on a LAN ComfyUI, behind a GPU arbiter that yields to games on the desktop.
+
 * **Antigravity** terminal tab and **Agy Chat**: streamed replies, tool steps, saved history, model picker, Stop, three permission modes, live progress
 * **GitHub repos** view (uses the server's own `gh` login) with open and clone
 * **Launch agent** page: one git worktree per task, opened in the agent you choose
