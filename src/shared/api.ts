@@ -1,4 +1,5 @@
 import { expireAuthSession } from '@/shared/authToken';
+import type { ImageGenerateInput } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
 
@@ -285,6 +286,14 @@ export const api = {
     read: (url: string) => post('/api/search/read', { url }),
     answer: (body: { query: string; sources?: number; model?: string; think?: boolean }, signal?: AbortSignal) =>
       authenticatedFetch('/api/search/answer', { method: 'POST', body: JSON.stringify(body), signal }),
+  },
+  // Local (ComfyUI) image generation on the desktop GPU. `file` uses authenticatedFetch so PNGs can be shown via URL.createObjectURL.
+  images: {
+    status: () => get('/api/images/status'),
+    generate: (body: ImageGenerateInput, options: ApiRequestOptions = {}) =>
+      post('/api/images/generate', body, options),
+    file: (id: string, options: ApiRequestOptions = {}) =>
+      get(`/api/images/file/${encodeURIComponent(id)}`, options),
   },
   // Whether the Prod Claude terminal (ssh to the production host's own Claude Code) is set up.
   prodClaude: {

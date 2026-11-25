@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
@@ -9,6 +10,7 @@ import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { AgentLauncherPanel } from '@/modules/agent-launcher';
 import { AgyChatPanel } from '@/modules/agy-chat';
+import { ImagesPanel, useImagesStatus } from '@/modules/images';
 import { OllamaPanel, useOllamaStatus } from '@/modules/ollama';
 import { WebSearchPanel } from '@/modules/web-search';
 import { ProdClaudePanel, useProdClaudeStatus } from '@/modules/prod-claude';
@@ -85,6 +87,8 @@ function WorkspaceMain({
   const shouldShowProdTab = useProdClaudeStatus().configured;
   const ollama = useOllamaStatus();
   const shouldShowLocalTab = ollama.configured;
+  const images = useImagesStatus();
+  const shouldShowImagesTab = images.configured;
 
   const {
     editingFile,
@@ -194,6 +198,8 @@ function WorkspaceMain({
         shouldShowProdTab={shouldShowProdTab}
         shouldShowLocalTab={shouldShowLocalTab}
         localStatus={ollama.status}
+        shouldShowImagesTab={shouldShowImagesTab}
+        imagesOnline={images.online}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
@@ -272,6 +278,12 @@ function WorkspaceMain({
           {shouldShowLocalTab && activeTab === 'local' && (
             <div className="h-full overflow-hidden">
               <OllamaPanel key={selectedProject.projectId} selectedProject={selectedProject} ollama={ollama} onOpenClaudeChat={() => setActiveTab('chat')} />
+            </div>
+          )}
+
+          {shouldShowImagesTab && activeTab === 'images' && (
+            <div className="h-full overflow-hidden">
+              <ImagesPanel status={images} />
             </div>
           )}
 

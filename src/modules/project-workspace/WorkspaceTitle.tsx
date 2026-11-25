@@ -44,6 +44,14 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.prod');
   }
 
+  if (activeTab === 'local') {
+    return t('tabs.local');
+  }
+
+  if (activeTab === 'images') {
+    return t('tabs.images');
+  }
+
   return t('misc.projectFallback');
 }
 

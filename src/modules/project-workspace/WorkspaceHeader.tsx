@@ -1,14 +1,15 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { AppTab, Project, ProjectSession } from '@/shared/types';
-import { cn } from '@/shared/utils';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 import WorkspaceConnectionStatus from '@/modules/project-workspace/WorkspaceConnectionStatus';
 import WorkspaceMoreMenu from '@/modules/project-workspace/WorkspaceMoreMenu';
 import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
+import type { AppTab, Project, ProjectSession } from '@/shared/types';
+import { cn } from '@/shared/utils';
 
 type WorkspaceHeaderProps = {
   activeTab: AppTab;
@@ -20,6 +21,8 @@ type WorkspaceHeaderProps = {
   shouldShowProdTab: boolean;
   shouldShowLocalTab?: boolean;
   localStatus?: 'unknown' | 'online' | 'offline';
+  shouldShowImagesTab?: boolean;
+  imagesOnline?: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. */
@@ -37,6 +40,8 @@ export default function WorkspaceHeader({
   shouldShowProdTab,
   shouldShowLocalTab,
   localStatus,
+  shouldShowImagesTab,
+  imagesOnline,
   isMobile,
   onMenuClick,
   onRenameSession,
@@ -137,6 +142,8 @@ export default function WorkspaceHeader({
                 shouldShowProdTab={shouldShowProdTab}
                 shouldShowLocalTab={shouldShowLocalTab}
                 localStatus={localStatus}
+                shouldShowImagesTab={shouldShowImagesTab}
+                imagesOnline={imagesOnline}
               />
             </div>
             {canScrollRight && (

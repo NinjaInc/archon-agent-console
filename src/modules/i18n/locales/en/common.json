@@ -24,6 +24,7 @@
     "prod": "Prod Claude",
     "agyChat": "Agy Chat",
     "local": "Local LLM",
+    "images": "Images",
     "files": "Files",
     "git": "Source Control",
     "tasks": "Tasks",

@@ -69,7 +69,7 @@ export type ProviderModelActions = {
 //----------------- PROJECTS AND SESSIONS ------------
 
 /** Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id. */
-export type AppTab = 'chat' | 'files' | 'shell' | 'agy' | 'prod' | 'agy-chat' | 'local' | 'git' | 'tasks' | 'browser' | 'github' | 'launcher' | 'skills' | 'search' | `plugin:${string}`;
+export type AppTab = 'chat' | 'files' | 'shell' | 'agy' | 'prod' | 'agy-chat' | 'local' | 'images' | 'git' | 'tasks' | 'browser' | 'github' | 'launcher' | 'skills' | 'search' | `plugin:${string}`;
 
 /** A message queued to be sent to a session at a future time. */
 export type ScheduledMessage = {
@@ -2052,4 +2052,47 @@ export type PlanUsageLimit = {
   window: 'weekly' | 'five-hour';
   remainingPercent: number;
   resetsAt: string | null;
+};
+
+// ---------------------------
+
+//----------------- IMAGES ------------
+
+/** Current holder category of the desktop GPU reported by `/api/images/status`, rendered in the Images tab's GPU status pill. */
+export type ImageGpuState = 'idle' | 'llm' | 'image' | 'busy-external';
+
+/** Active GPU arbiter lease included in `/api/images/status` responses so callers can inspect current GPU holders. */
+export type ImageGpuLease = {
+  id: string;
+  holder: string;
+  kind: 'llm' | 'image';
+  priority: 'interactive' | 'nightly';
+  expiresAt: number;
+  preempted: boolean;
+};
+
+/** Combined ComfyUI reachability and GPU arbiter snapshot from `/api/images/status`, used to gate the Images tab and render status. */
+export type ImagesStatus = {
+  configured: boolean;
+  online: boolean;
+  problem?: string;
+  state: ImageGpuState;
+  leases: ImageGpuLease[];
+};
+
+/** Parameters sent to `POST /api/images/generate` for a single txt2img generation request. */
+export type ImageGenerateInput = {
+  prompt: string;
+  negative?: string;
+  width: number;
+  height: number;
+  seed?: number;
+};
+
+/** Metadata returned by `POST /api/images/generate` once the generated PNG is saved on the server. */
+export type GeneratedImageResult = {
+  id: string;
+  width: number;
+  height: number;
+  seed: number;
 };

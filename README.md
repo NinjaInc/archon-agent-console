@@ -154,9 +154,9 @@ It creates a key used only for this tab, pins the host's SSH key (compare the pr
 
 The key file lives on this server as the service user, so a compromised agent here could still read it. The red banner and the restricted key limit what it could do with it; treat the production Claude's own permission prompts as the last line of defence.
 
-### Image generation (optional, API only for now)
+### Image generation (optional)
 
-Text-to-image on a LAN ComfyUI, one GPU job at a time. Set `COMFYUI_BASE_URL` (and optionally `COMFYUI_CHECKPOINT`) and `GPU_STATUS_URL`
+Text-to-image on a LAN ComfyUI from the Images tab, one GPU job at a time. Set `COMFYUI_BASE_URL` (and optionally `COMFYUI_CHECKPOINT`) and `GPU_STATUS_URL`
 for the [desktop status service](scripts/desktop/README.md), so a game on that machine always wins. Private addresses only.
 
 ### Creative tools (optional, switched on per project)

@@ -16,6 +16,8 @@ All notable changes to Archon Agent Console are documented here. It is a fork of
 
 ### Added
 
+- Images tab with a GPU status pill; results can be downloaded.
+
 - Claude and Antigravity plan limits (weekly and five-hour) in the token usage popup and the Agy Chat header.
 
 - Image generation API on a LAN ComfyUI, behind a GPU arbiter that yields to games on the desktop.

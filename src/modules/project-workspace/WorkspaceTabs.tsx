@@ -1,10 +1,11 @@
-import { Cpu, MessageSquare, MessageSquareText, Sparkles, Terminal, Folder, GitBranch, MonitorPlay, Server, type LucideIcon } from 'lucide-react';
+import { Cpu, Folder, GitBranch, Image as ImageIcon, MessageSquare, MessageSquareText, MonitorPlay, Server, Sparkles, Terminal } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Tooltip, PillBar, Pill } from '@/shared/ui';
 import type { AppTab } from '@/shared/types';
+import { Pill, PillBar, Tooltip } from '@/shared/ui';
 
 type WorkspaceTabsProps = {
   activeTab: AppTab;
@@ -16,12 +17,17 @@ type WorkspaceTabsProps = {
   shouldShowLocalTab?: boolean;
   /** Colours the dot on the Local tab: green when the host answers, red when it does not. */
   localStatus?: 'unknown' | 'online' | 'offline';
+  /** True once ComfyUI image generation is set up on the server. */
+  shouldShowImagesTab?: boolean;
+  /** Colours the dot on the Images tab: green when ComfyUI answers, red when it does not. */
+  imagesOnline?: boolean;
 };
 
 type BuiltInTab = {
   kind: 'builtin';
   id: AppTab;
   labelKey: string;
+  defaultLabel?: string;
   icon: LucideIcon;
 };
 
@@ -36,7 +42,9 @@ const BASE_TABS: BuiltInTab[] = [
   { kind: 'builtin', id: 'git',   labelKey: 'tabs.git',   icon: GitBranch },
 ];
 
-const LOCAL_TAB: BuiltInTab = { kind: 'builtin', id: 'local', labelKey: 'tabs.local', icon: Cpu };
+const LOCAL_TAB: BuiltInTab = { kind: 'builtin', id: 'local', labelKey: 'tabs.local', defaultLabel: 'Local LLM', icon: Cpu };
+
+const IMAGES_TAB: BuiltInTab = { kind: 'builtin', id: 'images', labelKey: 'tabs.images', defaultLabel: 'Images', icon: ImageIcon };
 
 const PROD_TAB: BuiltInTab = { kind: 'builtin', id: 'prod', labelKey: 'tabs.prod', icon: Server };
 
@@ -55,17 +63,20 @@ export default function WorkspaceTabs({
   shouldShowProdTab,
   shouldShowLocalTab = false,
   localStatus = 'unknown',
+  shouldShowImagesTab = false,
+  imagesOnline,
 }: WorkspaceTabsProps) {
   const { t } = useTranslation();
 
   // Plugin tabs and Tasks live in the sidebar footer (SidebarFooter), not in this bar.
   // Prod Claude sits right after the two local terminals, so the three terminals stay together.
-  // Order: the chats (Claude, Agy, then the Local model), the code terminals (+ Prod Claude), then the project views.
+  // Order: the chats (Claude, Agy, then the Local model and Images), the code terminals (+ Prod Claude), then the project views.
   const [claudeChat, agyChat, claudeShell, agyShell, ...projectViews] = BASE_TABS;
   const tabs: BuiltInTab[] = [
     claudeChat,
     agyChat,
     ...(shouldShowLocalTab ? [LOCAL_TAB] : []),
+    ...(shouldShowImagesTab ? [IMAGES_TAB] : []),
     claudeShell,
     agyShell,
     ...(shouldShowProdTab ? [PROD_TAB] : []),
@@ -100,7 +111,7 @@ export default function WorkspaceTabs({
     >
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeTab;
-        const displayLabel = t(tab.labelKey);
+        const displayLabel = tab.defaultLabel ? t(tab.labelKey, { defaultValue: tab.defaultLabel }) : t(tab.labelKey);
 
         return (
           <Fragment key={`${tab.id}-${index}`}>
@@ -123,6 +134,13 @@ export default function WorkspaceTabs({
                       role="img"
                       aria-label={localStatus === 'online' ? 'Local LLM online' : localStatus === 'offline' ? 'Local LLM offline' : 'Local LLM status unknown'}
                       className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${localStatus === 'online' ? 'bg-emerald-500' : localStatus === 'offline' ? 'bg-red-500' : 'bg-muted-foreground/50'}`}
+                    />
+                  )}
+                  {tab.id === 'images' && imagesOnline !== undefined && (
+                    <span
+                      role="img"
+                      aria-label={imagesOnline ? 'Images online' : 'Images offline'}
+                      className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${imagesOnline ? 'bg-emerald-500' : 'bg-red-500'}`}
                     />
                   )}
                 </span>
